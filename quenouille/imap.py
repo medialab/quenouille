@@ -5,11 +5,11 @@
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
 from queue import Queue
-from threading import Lock, Thread, Timer
+from threading import Condition, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
 # TODO: test cases when the number of workers is over the size of iterable
-# TODO: handle clean exit
+# TODO: can it exit/break safely?
 
 # Handy constants
 # -----------------------------------------------------------------------------
@@ -26,7 +26,7 @@ THE_END_IS_NIGH = object()
 
 # The implementation
 # -----------------------------------------------------------------------------
-def imap(iterable, func, threads):
+def imap(iterable, func, threads, ordered=False):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
     of threads and finally yielding the produced results.
@@ -35,20 +35,28 @@ def imap(iterable, func, threads):
         iterable (iterable): iterable of jobs.
         func (callable): The task to perform with each job.
         threads (int): The number of threads to use.
+        ordered (bool, optional): Whether to yield results in order or not.
+            Defaults to `False`.
 
     Yields:
         any: will yield results based on the given job.
 
     """
 
-    # Useful members
+    # Making our iterable a thread-safe iterator
     safe_iterator = ThreadSafeIterator(iterable)
 
+    # One queue for jobs to do & one queue to output their results
     input_queue = Queue(maxsize=threads)
     output_queue = Queue(maxsize=threads)
 
+    # A lock on finished threads to be able to know when to end output queue
     finished_lock = Lock()
     finished_counter = 0
+
+    # A last index counter to be able to ouput results in order if needed
+    last_index = -1
+    last_index_condition = Condition()
 
     # Closures
     def enqueue(last_job=None):

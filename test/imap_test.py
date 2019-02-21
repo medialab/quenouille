@@ -19,7 +19,7 @@ DATA = [
 
 
 def sleeper(job):
-    time.sleep(job[1] / 2)
+    time.sleep(job[1])
     return job
 
 

@@ -18,7 +18,7 @@ lint:
 
 unit:
 	@echo Running unit tests...
-	pytest -s
+	pytest -sv
 	@echo
 
 upload:
