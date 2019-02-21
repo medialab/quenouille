@@ -70,3 +70,13 @@ print('10 threads / 1 parallelism / ordered')
 for result in imap(DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, ordered=True):
     print(result)
 print()
+
+print('10 threads / 2 parallelism')
+for result in imap(DATA, sleeper, 10, group=itemgetter(0), group_parallelism=2, ordered=False):
+    print(result)
+print()
+
+print('10 threads / 2 parallelism / ordered')
+for result in imap(DATA, sleeper, 10, group=itemgetter(0), group_parallelism=2, ordered=True):
+    print(result)
+print()
