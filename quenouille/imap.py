@@ -61,6 +61,8 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     # Checking arguments
     if handling_group_parallelism and not callable(group):
         raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism`')
+    else:
+        get_group = lambda x: group(x[1])
 
     # Making our iterable a thread-safe iterator
     safe_iterator = ThreadSafeIterator(enumerate(iterable))
@@ -105,7 +107,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
 
             # Can we use the buffer?
             if handling_group_parallelism and last_job is not None:
-                last_group = group(last_job)
+                last_group = get_group(last_job)
 
                 with grouping_lock:
                     buffer = buffers.get(last_group)
@@ -140,7 +142,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
             # Group parallelism
             if handling_group_parallelism:
                 with grouping_lock:
-                    g = group(job)
+                    g = get_group(job)
 
                     if worked_groups[g] >= group_parallelism:
 
