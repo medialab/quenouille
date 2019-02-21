@@ -6,8 +6,8 @@
 #
 import math
 from queue import Queue
-from collections import defaultdict, Counter
-from threading import Condition, Lock, Thread, Timer
+from collections import defaultdict, deque, Counter
+from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
 # TODO: can it exit/break safely?
@@ -80,7 +80,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     # State
     grouping_lock = Lock()
     worked_groups = Counter()
-    buffers = defaultdict(list)
+    buffers = defaultdict(deque)
     waiters = {}
 
     # Closures
@@ -96,18 +96,88 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         nonlocal finished_counter
 
         job = None
+        g = None
         should_wait = False
         waiter_to_release = None
 
         # Consuming the iterable to find suitable job
         while True:
 
-            # Can we use the buffer
-            # with grouping_lock:
+            # Can we use the buffer?
+            if handling_group_parallelism and last_job is not None:
+                last_group = group(last_job)
+
+                with grouping_lock:
+                    buffer = buffers.get(last_group)
+
+                    if buffer is not None:
+                        job = buffer.popleft()
+
+                        # Dropping buffer from memory if empty
+                        if len(buffer) == 0:
+                            del buffers[last_group]
+
+                        # Checking if a thread is waiting on us
+                        if last_group in waiters:
+                            waiter_to_release = waiters.pop(last_group)
+
+                        break
+
+                    else:
+
+                        # Decrementing group
+                        if worked_groups[last_group] == 1:
+                            del worked_groups[last_group]
+                        else:
+                            worked_groups[last_group] -= 1
 
             # Let's consume the iterable
             job = next(safe_iterator, None)
-            break
+
+            if job is None:
+                break
+
+            # Group parallelism
+            if handling_group_parallelism:
+                with grouping_lock:
+                    g = group(job)
+
+                    if worked_groups[g] >= group_parallelism:
+
+                        # If buffer is full, we wait
+                        buffer = buffers.get(g)
+
+                        if buffer is not None and len(buffer) >= group_buffer_size:
+                            should_wait = True
+                            break
+
+                        # Else we add job to buffer
+                        buffers[g].append(job)
+                        continue
+                    else:
+
+                        # Incrementing the group
+                        worked_groups[g] += 1
+                        break
+            else:
+                break
+
+        # Waiting?
+        if should_wait:
+            waiter = Event()
+            waiters[g] = waiter
+            waiter.wait()
+
+            # Buffering
+            with grouping_lock:
+                buffers[g].append(job)
+
+            # Recurse
+            return enqueue(last_job)
+
+        # Releasing a waiter?
+        if waiter_to_release:
+            waiter_to_release.set()
 
         # If we don't have any job left, we count towards the end
         if job is None:

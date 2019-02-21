@@ -2,6 +2,7 @@
 # Quenouille imap Unit Tests
 # =============================================================================
 import time
+import pytest
 from operator import itemgetter
 from quenouille import imap
 
@@ -25,6 +26,10 @@ def sleeper(job):
 
 
 class TestImap(object):
+    def test_arguments(self):
+        with pytest.raises(TypeError):
+            imap(DATA, sleeper, 3, group_parallelism=1, group=None)
+
     def test_basics(self):
 
         results = list(imap(DATA, sleeper, 2))
