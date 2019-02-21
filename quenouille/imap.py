@@ -8,8 +8,8 @@ from queue import Queue
 from threading import Condition, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
-# TODO: test cases when the number of workers is over the size of iterable
 # TODO: can it exit/break safely?
+# TODO: handle output buffer to have more latitude on ordered performance
 
 # Handy constants
 # -----------------------------------------------------------------------------
@@ -44,7 +44,7 @@ def imap(iterable, func, threads, ordered=False):
     """
 
     # Making our iterable a thread-safe iterator
-    safe_iterator = ThreadSafeIterator(iterable)
+    safe_iterator = ThreadSafeIterator(enumerate(iterable))
 
     # One queue for jobs to do & one queue to output their results
     input_queue = Queue(maxsize=threads)
@@ -97,6 +97,7 @@ def imap(iterable, func, threads, ordered=False):
         Function consuming the input queue, performing the task with the
         consumed job and piping the result into the output queue.
         """
+        nonlocal last_index
 
         while True:
             job = input_queue.get(timeout=FOREVER)
@@ -104,7 +105,18 @@ def imap(iterable, func, threads, ordered=False):
             if job is None:
                 break
 
-            result = func(job)
+            index, data = job
+
+            result = func(data)
+
+            if ordered:
+                with last_index_condition:
+
+                    while last_index != index - 1:
+                        last_index_condition.wait()
+
+                    last_index = index
+                    last_index_condition.notify_all()
 
             # Piping into output queue
             output_queue.put(result, timeout=FOREVER)
