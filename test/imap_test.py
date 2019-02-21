@@ -28,18 +28,8 @@ class TestImap(object):
 
         results = list(imap(DATA, sleeper, 2))
 
-        assert results == [
-            ('A', 0.2),
-            ('A', 0.3),
-            ('B', 0.1),
-            ('B', 0.2),
-            ('B', 0.3),
-            ('B', 0.2),
-            ('B', 0.1),
-            ('C', 0.1),
-            ('D', 0.1),
-            ('D', 0.4)
-        ]
+        assert len(results) == len(DATA)
+        assert set(results) == set(DATA)
 
     def test_less_jobs_than_threads(self):
 
