@@ -56,7 +56,17 @@ for result in imap(HOMEGENEOUS_DATA, sleeper, 10, group=itemgetter(0), group_par
     print(result)
 print()
 
-print('10 threads / 1 parallelism / ordered')
+print('2 threads / 1 parallelism / ordered')
 for result in imap(DATA, sleeper, 2, group=itemgetter(0), group_parallelism=1, ordered=True):
+    print(result)
+print()
+
+print('10 threads / 1 parallelism')
+for result in imap(DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, ordered=False):
+    print(result)
+print()
+
+print('10 threads / 1 parallelism / ordered')
+for result in imap(DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, ordered=True):
     print(result)
 print()
