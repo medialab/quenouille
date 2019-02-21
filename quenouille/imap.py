@@ -26,7 +26,7 @@ SOON = 0.0001
 THE_END_IS_NIGH = object()
 
 # The infinity, and beyond
-INFINITY = math.inf
+INFINITY = float('inf')
 
 
 # The implementation
