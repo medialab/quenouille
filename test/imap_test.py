@@ -2,6 +2,7 @@
 # Quenouille imap Unit Tests
 # =============================================================================
 import time
+from operator import itemgetter
 from quenouille import imap
 
 DATA = [

@@ -4,7 +4,9 @@
 #
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
+import math
 from queue import Queue
+from collections import defaultdict, Counter
 from threading import Condition, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
@@ -23,10 +25,14 @@ SOON = 0.0001
 # A sentinel value for the output queue to know when to stop
 THE_END_IS_NIGH = object()
 
+# The infinity, and beyond
+INFINITY = math.inf
+
 
 # The implementation
 # -----------------------------------------------------------------------------
-def imap(iterable, func, threads, ordered=False):
+def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
+         group=None, group_buffer_size=1):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
     of threads and finally yielding the produced results.
@@ -37,11 +43,24 @@ def imap(iterable, func, threads, ordered=False):
         threads (int): The number of threads to use.
         ordered (bool, optional): Whether to yield results in order or not.
             Defaults to `False`.
+        group_parallelism (int, optional): Number of threads allowed to work
+            on the same group at once. Defaults to no limit.
+        group (callable, optional): Function returning a job's group.
+            This argument is required if you need to restrict group parallelism.
+        group_buffer_size (int, optional): Max number of jobs that the function
+            will buffer into memory when waiting for a thread to be available.
+            Defaults to 1.
 
     Yields:
         any: will yield results based on the given job.
 
     """
+
+    handling_group_parallelism = group_parallelism != INFINITY
+
+    # Checking arguments
+    if handling_group_parallelism and not callable(group):
+        raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism`')
 
     # Making our iterable a thread-safe iterator
     safe_iterator = ThreadSafeIterator(enumerate(iterable))
@@ -58,6 +77,12 @@ def imap(iterable, func, threads, ordered=False):
     last_index = -1
     last_index_condition = Condition()
 
+    # State
+    grouping_lock = Lock()
+    worked_groups = Counter()
+    buffers = defaultdict(list)
+    waiters = {}
+
     # Closures
     def enqueue(last_job=None):
         """
@@ -71,9 +96,14 @@ def imap(iterable, func, threads, ordered=False):
         nonlocal finished_counter
 
         job = None
+        should_wait = False
+        waiter_to_release = None
 
         # Consuming the iterable to find suitable job
         while True:
+
+            # Can we use the buffer
+            # with grouping_lock:
 
             # Let's consume the iterable
             job = next(safe_iterator, None)
