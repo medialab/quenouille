@@ -40,3 +40,9 @@ class TestImap(object):
             ('D', 0.1),
             ('D', 0.4)
         ]
+
+    def test_less_jobs_than_threads(self):
+
+        results = list(imap(DATA[:2], sleeper, 2))
+
+        assert results == [('A', 0.2), ('A', 0.3)]
