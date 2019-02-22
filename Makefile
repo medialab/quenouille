@@ -12,7 +12,7 @@ clean:
 	find . -name __pycache__ | xargs rm -rf
 
 ftest:
-	python ftest.py
+	python cases.py
 
 lint:
 	@echo Linting source code using pep8...

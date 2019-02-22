@@ -218,6 +218,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             index, data = job
 
             # Emitting
+            # TODO: should this be called in a lock?
             if listener is not None:
                 listener('start', data)
 
