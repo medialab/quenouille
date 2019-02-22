@@ -21,7 +21,7 @@ DATA = [
 
 
 def sleeper(job):
-    time.sleep(job[1])
+    time.sleep(job[1] / 10)
     return job
 
 
@@ -48,3 +48,31 @@ class TestImap(object):
         results = list(imap(DATA, sleeper, 2, ordered=True))
 
         assert results == DATA
+
+    def test_group_parallelism(self):
+
+        # Unordered
+        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0)))
+
+        assert set(results) == set(DATA)
+
+        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3))
+
+        assert set(results) == set(DATA)
+
+        results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
+
+        assert set(results) == set(DATA)
+
+        # Ordered
+        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), ordered=True))
+
+        assert set(results) == set(DATA)
+
+        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3, ordered=True))
+
+        assert set(results) == set(DATA)
+
+        results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3, ordered=True))
+
+        assert set(results) == set(DATA)

@@ -11,6 +11,7 @@ from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
 # TODO: can it exit/break safely?
+# TODO: callbacks for tracking progresses
 # TODO: handle output buffer to have more latitude on ordered performance
 # TODO: throttling, rate limit, entropy
 
@@ -199,7 +200,6 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         """
         nonlocal last_index
 
-        # TODO: never breaks free?
         while True:
             job = input_queue.get(timeout=FOREVER)
 
