@@ -83,7 +83,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     enqueue_lock = Lock()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
-    waiters = {}
+    waiters = defaultdict(list)
 
     # Closures
     def enqueue(last_job=None):
@@ -121,13 +121,19 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
 
             if buffer is not None:
                 if current_group in waiters:
-                    waiters[current_group].set()
-                    del waiters[current_group]
+                    W = waiters[current_group]
+                    W.pop(0).set()
+
+                    if len(W) == 0:
+                        del waiters[current_group]
 
                     job = buffer.get(timeout=FOREVER)
 
                 elif not buffer.empty():
                     job = buffer.get_nowait()
+
+                    if buffer.empty():
+                        del buffers[current_group]
 
         # Not suitable buffer found, let's consume the iterable!
         while job is None:
@@ -151,7 +157,8 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
                         continue
 
                     waiter = Event()
-                    waiters[current_group] = waiter
+                    waiters[current_group].append(waiter)
+
                     enqueue_lock.release()
 
                     waiter.wait()
