@@ -106,7 +106,7 @@ for result in imap_unordered(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0),
 print()
 
 print('10 threads / 1 parallelism / 3 buffer size / ordered')
-for result in imap(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, ordered=True, group_buffer_size=3):
+for result in imap(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, group_buffer_size=3):
     print(result)
 print()
 
