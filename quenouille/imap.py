@@ -91,6 +91,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     # State
     enqueue_lock = Lock()
+    listener_lock = Lock()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
     waiters = defaultdict(list)
@@ -218,9 +219,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             index, data = job
 
             # Emitting
-            # TODO: should this be called in a lock?
+            # TODO: do we need this lock?
             if listener is not None:
-                listener('start', data)
+                with listener_lock:
+                    listener('start', data)
 
             # Performing actual work
             result = func(data)
