@@ -129,8 +129,11 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         while True:
             job = next(safe_iterator, None)
 
+            if job is None:
+                break
+
             # Do we need to increment counters?
-            if handling_group_parallelism and job is not None:
+            if handling_group_parallelism:
                 current_group = group(job)
 
                 # Is current group full?
@@ -148,6 +151,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
 
                 # Incrementing group
                 worked_groups[current_group] += 1
+                break
 
             else:
                 break
