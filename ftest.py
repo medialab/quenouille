@@ -37,19 +37,28 @@ HOMEGENEOUS_DATA = [
     ('B', 0.1, 9),
 ]
 
+BUFFER_SIZE_DATA = [
+    ('B', 0.4, 0),
+    ('B', 0.4, 1),
+    ('B', 0.4, 2),
+    ('C', 0.2, 3),
+    ('D', 0.1, 4),
+    ('E', 0.3, 5)
+]
+
 def sleeper(job):
     time.sleep(job[1])
     return job
 
-# print('2 threads')
-# for result in imap(DATA, sleeper, 2):
-#     print(result)
-# print()
+print('2 threads')
+for result in imap(DATA, sleeper, 2):
+    print(result)
+print()
 
-# print('10 threads / homogeneous (result should be ordered by sleep time)')
-# for result in imap(HOMEGENEOUS_DATA, sleeper, 10):
-#     print(result)
-# print()
+print('10 threads / homogeneous (result should be ordered by sleep time)')
+for result in imap(HOMEGENEOUS_DATA, sleeper, 10):
+    print(result)
+print()
 
 print('10 threads / 1 parallelism / homogeneous (jobs processed sequentially)')
 for result in imap(HOMEGENEOUS_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1):
@@ -78,5 +87,35 @@ print()
 
 print('10 threads / 2 parallelism / ordered')
 for result in imap(DATA, sleeper, 10, group=itemgetter(0), group_parallelism=2, ordered=True):
+    print(result)
+print()
+
+print('2 threads / 1 parallelism / 3 buffer size')
+for result in imap(BUFFER_SIZE_DATA, sleeper, 2, group=itemgetter(0), group_parallelism=1, ordered=False, group_buffer_size=3):
+    print(result)
+print()
+
+print('2 threads / 1 parallelism / 3 buffer size / ordered')
+for result in imap(BUFFER_SIZE_DATA, sleeper, 2, group=itemgetter(0), group_parallelism=1, ordered=True, group_buffer_size=3):
+    print(result)
+print()
+
+print('10 threads / 1 parallelism / 3 buffer size')
+for result in imap(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, ordered=False, group_buffer_size=3):
+    print(result)
+print()
+
+print('10 threads / 1 parallelism / 3 buffer size / ordered')
+for result in imap(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=1, ordered=True, group_buffer_size=3):
+    print(result)
+print()
+
+print('10 threads / 3 parallelism / 3 buffer size')
+for result in imap(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=3, ordered=True, group_buffer_size=3):
+    print(result)
+print()
+
+print('10 threads / 3 parallelism / 3 buffer size / ordered')
+for result in imap(BUFFER_SIZE_DATA, sleeper, 10, group=itemgetter(0), group_parallelism=3, ordered=True, group_buffer_size=3):
     print(result)
 print()
