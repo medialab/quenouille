@@ -6,7 +6,6 @@
 #
 from queue import Queue
 from collections import defaultdict, Counter
-from functools import partial, update_wrapper
 from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
@@ -263,10 +262,18 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
 # Exporting specialized variants
 # -----------------------------------------------------------------------------
-imap = partial(generic_imap, ordered=True)
-imap_unordered = partial(generic_imap, ordered=False)
 
-update_wrapper(imap, generic_imap)
-update_wrapper(imap_unordered, generic_imap)
+# NOTE: not using `functool.partial/.update_wrapper` because if does not work
+# with the built-in `help` function so well
+def imap(*args, **kwargs):
+    return generic_imap(*args, ordered=True, **kwargs)
+
+
+def imap_unordered(*args, **kwargs):
+    return generic_imap(*args, ordered=False, **kwargs)
+
+
+imap.__doc__ = generic_imap.__doc__
+imap_unordered.__doc__ = generic_imap.__doc__
 
 __all__ = ['imap', 'imap_unordered']
