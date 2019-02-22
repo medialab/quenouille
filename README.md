@@ -13,12 +13,8 @@ pip install quenouille
 ```
 
 ## Usage
-
-- [Quenouille](#quenouille)
-  - [Installation](#installation)
-  - [Usage](#usage)
-    - [imap](#imap)
-    - [imap_unordered](#imapunordered)
+* [imap](#imap)
+* [imap_unordered](#imapunordered)
 
 ### imap
 
