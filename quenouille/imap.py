@@ -72,8 +72,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     input_queue = Queue(maxsize=threads)
     output_queue = Queue(maxsize=threads)
 
-    # A lock on finished threads to be able to know when to end output queue
-    finished_lock = Lock()
+    # A counter on finished threads to be able to know when to end output queue
     finished_counter = 0
 
     # A last index counter to be able to ouput results in order if needed
@@ -84,6 +83,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     enqueue_lock = Lock()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
+    waiters = {}
 
     # Closures
     def enqueue(last_job=None):
@@ -120,10 +120,14 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
             )
 
             if buffer is not None:
-                job = buffer.get_nowait()
+                if current_group in waiters:
+                    waiters[current_group].set()
+                    del waiters[current_group]
 
-                if buffer.empty():
-                    del buffers[current_group]
+                    job = buffer.get(timeout=FOREVER)
+
+                elif not buffer.empty():
+                    job = buffer.get_nowait()
 
         # Not suitable buffer found, let's consume the iterable!
         while job is None:
@@ -140,11 +144,20 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
                 if worked_groups[current_group] >= group_parallelism:
                     buffer = buffers[current_group]
 
+                    if not buffer.full():
+                        buffer.put_nowait(job)
+
+                        job = None
+                        continue
+
+                    waiter = Event()
+                    waiters[current_group] = waiter
+                    enqueue_lock.release()
+
+                    waiter.wait()
                     buffer.put(job, timeout=FOREVER)
 
-                    job = None
-                    continue
-
+                    return enqueue()
                 break
             else:
                 break
@@ -152,25 +165,25 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         # If we don't have any job left, we count towards the end
         if job is None:
 
-            # TODO: useless lock with global enqueue lock
-            with finished_lock:
-                finished_counter += 1
+            # Releasing the lock
+            enqueue_lock.release()
 
-                # All threads ended? Let's signal the output queue
-                if finished_counter == threads:
-                    output_queue.put(THE_END_IS_NIGH, timeout=FOREVER)
+            finished_counter += 1
+
+            # All threads ended? Let's signal the output queue
+            if finished_counter == threads:
+                output_queue.put(THE_END_IS_NIGH, timeout=FOREVER)
 
         # We do have another job to do, let's signal the input queue
         else:
             if handling_group_parallelism:
                 assert current_group is not None
                 worked_groups[current_group] += 1
-                print(worked_groups)
+
+            # Releasing the lock
+            enqueue_lock.release()
 
             input_queue.put(job, timeout=FOREVER)
-
-        # Releasing the lock
-        enqueue_lock.release()
 
     def worker():
         """
