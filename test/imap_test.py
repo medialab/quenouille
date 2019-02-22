@@ -3,6 +3,7 @@
 # =============================================================================
 import time
 import pytest
+from collections import defaultdict
 from operator import itemgetter
 from quenouille import imap, imap_unordered
 
@@ -29,6 +30,9 @@ class TestImap(object):
     def test_arguments(self):
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 3, group_parallelism=1, group=None)
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 3, listener=4)
 
     def test_basics(self):
 
@@ -76,3 +80,14 @@ class TestImap(object):
         results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
 
         assert set(results) == set(DATA)
+
+    def test_listener(self):
+        events = defaultdict(list)
+
+        listener = lambda event, job: events[event].append(job)
+
+        list(imap_unordered(DATA, sleeper, 5, listener=listener))
+
+        assert set(events.keys()) == {'start'}
+
+        assert set(events['start']) == set(DATA)

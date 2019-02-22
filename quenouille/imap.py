@@ -10,7 +10,6 @@ from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
 # TODO: can it exit/break safely?
-# TODO: callbacks for tracking progresses
 # TODO: handle output buffer to have more latitude on ordered performance
 # TODO: throttling, rate limit, entropy
 
@@ -33,7 +32,7 @@ INFINITY = float('inf')
 # The implementation
 # -----------------------------------------------------------------------------
 def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                 group=None, group_buffer_size=1):
+                 group=None, group_buffer_size=1, listener=None):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
     of threads and finally yielding the produced results.
@@ -51,6 +50,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         group_buffer_size (int, optional): Max number of jobs that the function
             will buffer into memory when waiting for a thread to be available.
             Defaults to 1.
+        listener (callable, optional): Function that will be called when
+            some events occur to be able to track progress.
 
     Yields:
         any: will yield results based on the given job.
@@ -60,6 +61,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     handling_group_parallelism = group_parallelism != INFINITY
 
     # Checking arguments
+    if listener is not None and not callable(listener):
+        raise TypeError('quenouille/imap: `listener` should be callable if provided.')
+
     if handling_group_parallelism and not callable(group):
         raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism`')
     else:
@@ -207,6 +211,11 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             index, data = job
 
+            # Emitting
+            if listener is not None:
+                listener('start', data)
+
+            # Performing actual work
             result = func(data)
 
             if ordered:
