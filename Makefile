@@ -19,6 +19,9 @@ lint:
 	pycodestyle --ignore E501,E722,E731 $(SOURCE) test
 	@echo
 
+hint:
+	pylint $(SOURCE)
+
 unit:
 	@echo Running unit tests...
 	pytest -sv

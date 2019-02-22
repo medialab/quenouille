@@ -4,7 +4,7 @@
 import time
 import pytest
 from operator import itemgetter
-from quenouille import imap
+from quenouille import imap, imap_unordered
 
 DATA = [
     ('A', 0.3, 0),
@@ -28,30 +28,43 @@ def sleeper(job):
 class TestImap(object):
     def test_arguments(self):
         with pytest.raises(TypeError):
-            imap(DATA, sleeper, 3, group_parallelism=1, group=None)
+            imap_unordered(DATA, sleeper, 3, group_parallelism=1, group=None)
 
     def test_basics(self):
 
-        results = list(imap(DATA, sleeper, 2))
+        results = list(imap_unordered(DATA, sleeper, 2))
 
         assert len(results) == len(DATA)
         assert set(results) == set(DATA)
 
     def test_less_jobs_than_threads(self):
 
-        results = list(imap(DATA[:2], sleeper, 2))
+        results = list(imap_unordered(DATA[:2], sleeper, 2))
 
         assert results == [('A', 0.2, 1), ('A', 0.3, 0)]
 
     def test_ordered(self):
 
-        results = list(imap(DATA, sleeper, 2, ordered=True))
+        results = list(imap(DATA, sleeper, 2))
 
         assert results == DATA
 
     def test_group_parallelism(self):
 
         # Unordered
+        results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0)))
+
+        assert set(results) == set(DATA)
+
+        results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3))
+
+        assert set(results) == set(DATA)
+
+        results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
+
+        assert set(results) == set(DATA)
+
+        # Ordered
         results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0)))
 
         assert set(results) == set(DATA)
@@ -61,18 +74,5 @@ class TestImap(object):
         assert set(results) == set(DATA)
 
         results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
-
-        assert set(results) == set(DATA)
-
-        # Ordered
-        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), ordered=True))
-
-        assert set(results) == set(DATA)
-
-        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3, ordered=True))
-
-        assert set(results) == set(DATA)
-
-        results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3, ordered=True))
 
         assert set(results) == set(DATA)

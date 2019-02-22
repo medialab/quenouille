@@ -4,9 +4,9 @@
 #
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
-import math
 from queue import Queue
 from collections import defaultdict, Counter
+from functools import partial, update_wrapper
 from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
@@ -33,8 +33,8 @@ INFINITY = float('inf')
 
 # The implementation
 # -----------------------------------------------------------------------------
-def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-         group=None, group_buffer_size=1):
+def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
+                 group=None, group_buffer_size=1):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
     of threads and finally yielding the produced results.
@@ -122,10 +122,10 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
 
             if buffer is not None:
                 if current_group in waiters:
-                    W = waiters[current_group]
-                    W.pop(0).set()
+                    w = waiters[current_group]
+                    w.pop(0).set()
 
-                    if len(W) == 0:
+                    if len(w) == 0:
                         del waiters[current_group]
 
                     job = buffer.get(timeout=FOREVER)
@@ -255,7 +255,18 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     for thread in pool:
         thread.start()
 
-    t = Timer(SOON, boot)
-    t.start()
+    next_tick = Timer(SOON, boot)
+    next_tick.start()
 
     return output()
+
+
+# Exporting specialized variants
+# -----------------------------------------------------------------------------
+imap = partial(generic_imap, ordered=True)
+imap_unordered = partial(generic_imap, ordered=False)
+
+update_wrapper(imap, generic_imap)
+update_wrapper(imap_unordered, generic_imap)
+
+__all__ = ['imap', 'imap_unordered']
