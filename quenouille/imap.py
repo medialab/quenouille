@@ -103,9 +103,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         job = None
         last_group = None
         current_group = None
-        full_buffer = None
 
-        # First we need to decrement the done group
         if last_job is not None and handling_group_parallelism:
             last_group = group(last_job)
 
@@ -114,19 +112,21 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
             else:
                 worked_groups[last_group] -= 1
 
-            # Checking the buffers
-            buffer = buffers.get(last_group)
+        # Checking the buffers
+        if handling_group_parallelism:
+            current_group, buffer = next(
+                ((k, b) for k, b in buffers.items() if worked_groups[k] < group_parallelism),
+                (None, None)
+            )
 
             if buffer is not None:
                 job = buffer.get_nowait()
-                buffer.task_done()
 
-                # Cleanup
                 if buffer.empty():
-                    del buffers[last_group]
+                    del buffers[current_group]
 
         # Not suitable buffer found, let's consume the iterable!
-        while True:
+        while job is None:
             job = next(safe_iterator, None)
 
             if job is None:
@@ -140,33 +140,19 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
                 if worked_groups[current_group] >= group_parallelism:
                     buffer = buffers.get(current_group)
 
-                    if buffer.full():
-                        full_buffer = buffer
-                        break
-                    else:
-                        buffer.put_nowait(job)
+                    buffer.put(job, timeout=FOREVER)
 
-                        # Pulling next value from iterator
-                        continue
+                    job = None
+                    continue
 
-                # Incrementing group
-                worked_groups[current_group] += 1
                 break
-
             else:
                 break
 
-        # Releasing the lock
-        enqueue_lock.release()
-
-        # Do we need to block?
-        if full_buffer:
-            full_buffer.put(job, timeout=FOREVER)
-
-            return enqueue(last_job)
-
         # If we don't have any job left, we count towards the end
         if job is None:
+
+            # TODO: useless lock with global enqueue lock
             with finished_lock:
                 finished_counter += 1
 
@@ -176,7 +162,13 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
 
         # We do have another job to do, let's signal the input queue
         else:
+            if handling_group_parallelism:
+                assert current_group is not None
+                worked_groups[current_group] += 1
             input_queue.put(job, timeout=FOREVER)
+
+        # Releasing the lock
+        enqueue_lock.release()
 
     def worker():
         """
