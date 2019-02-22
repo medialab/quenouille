@@ -83,7 +83,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     # State
     enqueue_lock = Lock()
     worked_groups = Counter()
-    buffers = defaultdict(lambda: Queue(maxsize=group_parallelism))
+    buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
 
     # Closures
     def enqueue(last_job=None):
@@ -101,12 +101,65 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         enqueue_lock.acquire()
 
         job = None
+        last_group = None
+        current_group = None
+        full_buffer = None
 
-        # Consuming the iterable
-        job = next(safe_iterator, None)
+        # First we need to decrement the done group
+        if last_job is not None and handling_group_parallelism:
+            last_group = group(last_job)
+
+            if worked_groups[last_group] == 1:
+                del worked_groups[last_group]
+            else:
+                worked_groups[last_group] -= 1
+
+            # Checking the buffers
+            buffer = buffers.get(last_group)
+
+            if buffer is not None:
+                job = buffer.get_nowait()
+                buffer.task_done()
+
+                # Cleanup
+                if buffer.empty():
+                    del buffers[last_group]
+
+        # Not suitable buffer found, let's consume the iterable!
+        while True:
+            job = next(safe_iterator, None)
+
+            # Do we need to increment counters?
+            if handling_group_parallelism and job is not None:
+                current_group = group(job)
+
+                # Is current group full?
+                if worked_groups[current_group] >= group_parallelism:
+                    buffer = buffers.get(current_group)
+
+                    if buffer.full():
+                        full_buffer = buffer
+                        break
+                    else:
+                        buffer.put_nowait(job)
+
+                        # Pulling next value from iterator
+                        continue
+
+                # Incrementing group
+                worked_groups[current_group] += 1
+
+            else:
+                break
 
         # Releasing the lock
         enqueue_lock.release()
+
+        # Do we need to block?
+        if full_buffer:
+            full_buffer.put(job, timeout=FOREVER)
+
+            return enqueue(last_job)
 
         # If we don't have any job left, we count towards the end
         if job is None:
