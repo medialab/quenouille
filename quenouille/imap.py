@@ -81,7 +81,7 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
     last_index_condition = Condition()
 
     # State
-    grouping_lock = Lock()
+    enqueue_lock = Lock()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_parallelism))
 
@@ -97,67 +97,16 @@ def imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
         """
         nonlocal finished_counter
 
+        # Acquiring a lock so no other thread may enter this part
+        enqueue_lock.acquire()
+
         job = None
-        g = None
 
-        # Consuming the iterable to find suitable job
-        while True:
+        # Consuming the iterable
+        job = next(safe_iterator, None)
 
-            # Can we use the buffer?
-            if handling_group_parallelism and last_job is not None:
-                last_group = get_group(last_job)
-
-                with grouping_lock:
-                    buffer = buffers.get(last_group)
-
-                if buffer is not None:
-                    job = buffer.get()
-                    buffer.task_done()
-
-                    # Dropping buffer from memory if empty
-                    if buffer.empty():
-                        with grouping_lock:
-                            del buffers[last_group]
-
-                    break
-
-                else:
-
-                    # Decrementing group
-                    with grouping_lock:
-                        if worked_groups[last_group] == 1:
-                            del worked_groups[last_group]
-                        else:
-                            worked_groups[last_group] -= 1
-
-            # Let's consume the iterable
-            job = next(safe_iterator, None)
-
-            if job is None:
-                break
-
-            # Group parallelism
-            if handling_group_parallelism:
-                g = get_group(job)
-
-                buffer = None
-
-                with grouping_lock:
-                    if worked_groups[g] >= group_parallelism:
-                        buffer = buffers[g]
-
-                    # Incrementing the group
-                    else:
-                        worked_groups[g] += 1
-
-                if buffer is not None:
-
-                    # Adding job to buffer
-                    buffer.put(job, timeout=FOREVER)
-
-                    return enqueue()
-
-            break
+        # Releasing the lock
+        enqueue_lock.release()
 
         # If we don't have any job left, we count towards the end
         if job is None:
