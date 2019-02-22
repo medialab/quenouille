@@ -61,6 +61,12 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     handling_group_parallelism = group_parallelism != INFINITY
 
     # Checking arguments
+    if not isinstance(threads, (int, float)) and threads < 1:
+        raise TypeError('quenouille/imap: `threads` should be a positive number.')
+
+    if not callable(func):
+        raise TypeError('quenouille/imap: `func` should be callable.')
+
     if listener is not None and not callable(listener):
         raise TypeError('quenouille/imap: `listener` should be callable if provided.')
 

@@ -28,6 +28,13 @@ def sleeper(job):
 
 class TestImap(object):
     def test_arguments(self):
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 'test')
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, 45, 'test')
+
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 3, group_parallelism=1, group=None)
 
