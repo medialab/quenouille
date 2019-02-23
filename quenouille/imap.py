@@ -4,12 +4,13 @@
 #
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
+import sys
 from queue import Queue
 from collections import defaultdict, Counter
 from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
-# TODO: can it exit/break safely?
+# TODO: can it exit safely?
 # TODO: handle output buffer to have more latitude on ordered performance
 # TODO: throttling, rate limit, entropy
 
@@ -24,6 +25,9 @@ SOON = 0.0001
 
 # A sentinel value for the output queue to know when to stop
 THE_END_IS_NIGH = object()
+
+# A sentinal value to propagate exceptions
+EVERYTHING_WILL_BURN = object()
 
 # The infinity, and beyond
 INFINITY = float('inf')
@@ -225,7 +229,12 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                     listener('start', data)
 
             # Performing actual work
-            result = func(data)
+            try:
+                result = func(data)
+            except BaseException:
+                return output_queue.put_nowait(
+                    (EVERYTHING_WILL_BURN, sys.exc_info())
+                )
 
             if ordered:
                 with last_index_condition:
@@ -259,6 +268,11 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
         while True:
             result = output_queue.get(timeout=FOREVER)
+
+            # An exception was thrown!
+            if isinstance(result, tuple) and result[0] is EVERYTHING_WILL_BURN:
+                _, (_, e, trace) = result
+                raise e.with_traceback(trace)
 
             # The end is night!
             if result is THE_END_IS_NIGH:
