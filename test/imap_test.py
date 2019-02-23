@@ -26,6 +26,11 @@ def sleeper(job):
     return job
 
 
+def enumerated_sleeper(job):
+    time.sleep(job[1][1] / 10)
+    return job[0]
+
+
 class TestImap(object):
     def test_arguments(self):
 
@@ -98,3 +103,14 @@ class TestImap(object):
         assert set(events.keys()) == {'start'}
 
         assert set(events['start']) == set(DATA)
+
+    def test_break(self):
+
+        for i in imap(enumerate(DATA), enumerated_sleeper, 5):
+            if i == 2:
+                break
+
+        results = list(imap_unordered(DATA, sleeper, 2))
+
+        assert len(results) == len(DATA)
+        assert set(results) == set(DATA)
