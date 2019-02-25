@@ -36,7 +36,8 @@ INFINITY = float('inf')
 # The implementation
 # -----------------------------------------------------------------------------
 def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                 group=None, group_buffer_size=1, listener=None):
+                 group=None, group_buffer_size=1, group_throttle=None,
+                 listener=None):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
     of threads and finally yielding the produced results.
@@ -54,6 +55,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         group_buffer_size (int, optional): Max number of jobs that the function
             will buffer into memory when waiting for a thread to be available.
             Defaults to 1.
+        group_throttle (float, optional): Optional throttle time to wait
+            between each task per group.
         listener (callable, optional): Function that will be called when
             some events occur to be able to track progress.
 
@@ -73,6 +76,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     if not isinstance(group_buffer_size, (int, float)) or group_buffer_size < 1:
         raise TypeError('quenouille/imap: `group_buffer_size` should be a positive number.')
+
+    if group_throttle is not None and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
+        raise TypeError('quenouille/imap: `group_throttle` should be >= 0.')
 
     if listener is not None and not callable(listener):
         raise TypeError('quenouille/imap: `listener` should be callable if provided.')
@@ -102,6 +108,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
     waiters = defaultdict(deque)
+    timers = {}
 
     # Closures
     def enqueue(last_job=None):
@@ -302,21 +309,23 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 # with the built-in `help` function so well. I am also not using `*args` and
 # `**kwargs` to make it easy on tooling...
 def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
-         group=None, group_buffer_size=1, listener=None):
+         group=None, group_buffer_size=1, group_throttle=None, listener=None):
 
     return generic_imap(
         iterable, func, threads, ordered=ordered,
         group_parallelism=group_parallelism, group=group,
-        group_buffer_size=group_buffer_size, listener=None)
+        group_buffer_size=group_buffer_size, group_throttle=group_throttle,
+        listener=None)
 
 
 def imap_unordered(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                   group=None, group_buffer_size=1, listener=None):
+                   group=None, group_buffer_size=1, group_throttle=None, listener=None):
 
     return generic_imap(
         iterable, func, threads, ordered=ordered,
         group_parallelism=group_parallelism, group=group,
-        group_buffer_size=group_buffer_size, listener=listener)
+        group_buffer_size=group_buffer_size, group_throttle=group_throttle,
+        listener=listener)
 
 
 imap.__doc__ = generic_imap.__doc__
