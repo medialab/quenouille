@@ -46,6 +46,9 @@ class TestImap(object):
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 3, listener=4)
 
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 3, group_buffer_size=-45)
+
     def test_basics(self):
 
         results = list(imap_unordered(DATA, sleeper, 2))
