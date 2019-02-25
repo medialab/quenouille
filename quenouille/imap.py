@@ -106,7 +106,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     # State
     enqueue_lock = Lock()
     listener_lock = Lock()
-    timer_lock = Lock()
+    timer_condition = Condition()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
     waiters = defaultdict(deque)
@@ -219,6 +219,11 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             input_queue.put((current_group, job), timeout=FOREVER)
 
+    def release_throttled(g):
+        with timer_condition:
+            del timers[g]
+            timer_condition.notify()
+
     def worker():
         """
         Function consuming the input queue, performing the task with the
@@ -234,11 +239,33 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             index, data = job
 
+            # Need to throttle?
+            if throttling:
+                with timer_condition:
+                    while g in timers:
+                        print('Throttling', data)
+                        timer_condition.wait()
+
+            # Recording time
+            # NOTE: we record before & after to prevent multiple threads
+            # to work at once on the same group
+            if throttling:
+                with timer_condition:
+                    timers[g] = True
+
             # Emitting
             # TODO: do we need this lock?
             if listener is not None:
                 with listener_lock:
                     listener('start', data)
+
+            # Recording time and releasing throttled threads
+            if throttling:
+                with timer_condition:
+                    timer = Timer(group_throttle, release_throttled, args=(g, ))
+                    timers[g] = timer
+
+                timer.start()
 
             # Performing actual work
             try:
