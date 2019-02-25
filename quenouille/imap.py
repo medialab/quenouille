@@ -84,7 +84,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     # One queue for jobs to do & one queue to output their results
     input_queue = Queue(maxsize=threads)
-    output_queue = Queue(maxsize=threads)
+    output_queue = Queue()
 
     # A counter on finished threads to be able to know when to end output queue
     finished_counter = 0
