@@ -116,6 +116,11 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     timers = {}
 
     # Closures
+    def emit(event, job):
+        if listener is not None:
+            with listener_lock:
+                listener(event, job)
+
     def enqueue(last_job=None):
         """
         Function consuming the iterable to pipe next job into the input queue
@@ -263,10 +268,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                     timers[g] = True
 
             # Emitting
-            # TODO: do we need this lock?
-            if listener is not None:
-                with listener_lock:
-                    listener('start', data)
+            emit('start', data)
 
             # Recording time and releasing throttled threads
             if throttling:
