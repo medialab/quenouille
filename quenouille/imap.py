@@ -10,10 +10,6 @@ from collections import defaultdict, deque, Counter
 from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
-# TODO: can it exit safely?
-# TODO: handle output buffer to have more latitude on ordered performance
-# TODO: throttling, rate limit, entropy
-
 # Handy constants
 # -----------------------------------------------------------------------------
 
@@ -109,6 +105,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     # State
     enqueue_lock = Lock()
     listener_lock = Lock()
+    yield_lock = Lock()
     timer_condition = Condition()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
@@ -337,7 +334,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             if result is THE_END_IS_NIGH:
                 break
 
-            yield result
+            # NOTE: not completely sure this lock is needed.
+            # Better safe than sorry...
+            with yield_lock:
+                yield result
 
     # Starting the threads
     pool = [Thread(target=worker, daemon=True) for _ in range(threads)]
