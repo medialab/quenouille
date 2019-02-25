@@ -299,13 +299,24 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 # -----------------------------------------------------------------------------
 
 # NOTE: not using `functool.partial/.update_wrapper` because if does not work
-# with the built-in `help` function so well
-def imap(*args, **kwargs):
-    return generic_imap(*args, ordered=True, **kwargs)
+# with the built-in `help` function so well. I am also not using `*args` and
+# `**kwargs` to make it easy on tooling...
+def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
+         group=None, group_buffer_size=1, listener=None):
+
+    return generic_imap(
+        iterable, func, threads, ordered=ordered,
+        group_parallelism=group_parallelism, group=group,
+        group_buffer_size=group_buffer_size, listener=None)
 
 
-def imap_unordered(*args, **kwargs):
-    return generic_imap(*args, ordered=False, **kwargs)
+def imap_unordered(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
+                   group=None, group_buffer_size=1, listener=None):
+
+    return generic_imap(
+        iterable, func, threads, ordered=ordered,
+        group_parallelism=group_parallelism, group=group,
+        group_buffer_size=group_buffer_size, listener=listener)
 
 
 imap.__doc__ = generic_imap.__doc__
