@@ -6,7 +6,7 @@
 #
 import sys
 from queue import Queue
-from collections import defaultdict, Counter
+from collections import defaultdict, deque, Counter
 from threading import Condition, Event, Lock, Thread, Timer
 from quenouille.thread_safe_iterator import ThreadSafeIterator
 
@@ -101,7 +101,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     listener_lock = Lock()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
-    waiters = defaultdict(list)
+    waiters = defaultdict(deque)
 
     # Closures
     def enqueue(last_job=None):
@@ -140,7 +140,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             if buffer is not None:
                 if current_group in waiters:
                     w = waiters[current_group]
-                    w.pop(0).set()
+                    w.popleft().set()
 
                     if len(w) == 0:
                         del waiters[current_group]
