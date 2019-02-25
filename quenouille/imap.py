@@ -36,7 +36,7 @@ INFINITY = float('inf')
 # The implementation
 # -----------------------------------------------------------------------------
 def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                 group=None, group_buffer_size=1, group_throttle=None,
+                 group=None, group_buffer_size=1, group_throttle=0,
                  listener=None):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
@@ -65,7 +65,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     """
 
-    handling_group_parallelism = group_parallelism != INFINITY
+    throttling = group_throttle != 0
+    handling_group_parallelism = group_parallelism != INFINITY or throttling
 
     # Checking arguments
     if not isinstance(threads, (int, float)) or threads < 1:
@@ -84,7 +85,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         raise TypeError('quenouille/imap: `listener` should be callable if provided.')
 
     if handling_group_parallelism and not callable(group):
-        raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism`')
+        raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism` or `group_throttle`')
     else:
         get_group = lambda x: group(x[1])
 
@@ -105,6 +106,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     # State
     enqueue_lock = Lock()
     listener_lock = Lock()
+    timer_lock = Lock()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
     waiters = defaultdict(deque)
@@ -215,7 +217,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             # Releasing the lock
             enqueue_lock.release()
 
-            input_queue.put(job, timeout=FOREVER)
+            input_queue.put((current_group, job), timeout=FOREVER)
 
     def worker():
         """
@@ -225,7 +227,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         nonlocal last_index
 
         while True:
-            job = input_queue.get(timeout=FOREVER)
+            g, job = input_queue.get(timeout=FOREVER)
 
             if job is None:
                 break
@@ -309,7 +311,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 # with the built-in `help` function so well. I am also not using `*args` and
 # `**kwargs` to make it easy on tooling...
 def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
-         group=None, group_buffer_size=1, group_throttle=None, listener=None):
+         group=None, group_buffer_size=1, group_throttle=0, listener=None):
 
     return generic_imap(
         iterable, func, threads, ordered=ordered,
@@ -319,7 +321,7 @@ def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
 
 
 def imap_unordered(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                   group=None, group_buffer_size=1, group_throttle=None, listener=None):
+                   group=None, group_buffer_size=1, group_throttle=0, listener=None):
 
     return generic_imap(
         iterable, func, threads, ordered=ordered,
