@@ -27,7 +27,7 @@ SOON = 0.0001
 THE_END_IS_NIGH = object()
 
 # A sentinal value to propagate exceptions
-EVERYTHING_WILL_BURN = object()
+EVERYTHING_MUST_BURN = object()
 
 # The infinity, and beyond
 INFINITY = float('inf')
@@ -273,7 +273,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                 result = func(data)
             except BaseException:
                 return output_queue.put_nowait(
-                    (EVERYTHING_WILL_BURN, sys.exc_info())
+                    (EVERYTHING_MUST_BURN, sys.exc_info())
                 )
 
             if ordered:
@@ -310,7 +310,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             result = output_queue.get(timeout=FOREVER)
 
             # An exception was thrown!
-            if isinstance(result, tuple) and result[0] is EVERYTHING_WILL_BURN:
+            if isinstance(result, tuple) and result[0] is EVERYTHING_MUST_BURN:
 
                 # Cleanup
                 if throttling:
