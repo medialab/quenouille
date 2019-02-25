@@ -26,8 +26,11 @@ SOON = 0.0001
 # A sentinel value for the output queue to know when to stop
 THE_END_IS_NIGH = object()
 
-# A sentinal value to propagate exceptions
+# A sentinel value to propagate exceptions
 EVERYTHING_MUST_BURN = object()
+
+# A sentinel value for throttling purposes
+THE_WAIT_IS_OVER = object()
 
 # The infinity, and beyond
 INFINITY = float('inf')
@@ -221,8 +224,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     def release_throttled(g):
         with timer_condition:
-            del timers[g]
-            timer_condition.notify()
+            timers[g] = THE_WAIT_IS_OVER
+            timer_condition.notify_all()
 
     def worker():
         """
@@ -240,15 +243,22 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             index, data = job
 
             # Need to throttle?
+            already_throttled = False
+
             if throttling:
+
+                # NOTE: we could also use deque of waiters to be more efficient?
                 with timer_condition:
-                    while g in timers:
+                    while g in timers and timers[g] is not THE_WAIT_IS_OVER:
                         timer_condition.wait()
+
+                    already_throttled = True
+                    timers[g] = True
 
             # Recording time
             # NOTE: we record before & after to prevent multiple threads
             # to work at once on the same group
-            if throttling:
+            if throttling and not already_throttled:
                 with timer_condition:
                     timers[g] = True
 
@@ -315,7 +325,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                 # Cleanup
                 if throttling:
                     for timer in timers.items():
-                        timer.cancel()
+                        if isinstance(timer, Timer):
+                            timer.cancel()
 
                 _, (_, e, trace) = result
                 raise e.with_traceback(trace)
