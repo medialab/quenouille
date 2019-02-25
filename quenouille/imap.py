@@ -78,7 +78,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     if not isinstance(group_buffer_size, (int, float)) or group_buffer_size < 1:
         raise TypeError('quenouille/imap: `group_buffer_size` should be a positive number.')
 
-    if group_throttle is not None and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
+    if group_throttle != 0 and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
         raise TypeError('quenouille/imap: `group_throttle` should be >= 0.')
 
     if listener is not None and not callable(listener):
@@ -243,7 +243,6 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             if throttling:
                 with timer_condition:
                     while g in timers:
-                        print('Throttling', data)
                         timer_condition.wait()
 
             # Recording time
@@ -262,6 +261,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             # Recording time and releasing throttled threads
             if throttling:
                 with timer_condition:
+
+                    # NOTE: we could improve the precision of the timer if needed
                     timer = Timer(group_throttle, release_throttled, args=(g, ))
                     timers[g] = timer
 
@@ -310,6 +311,12 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             # An exception was thrown!
             if isinstance(result, tuple) and result[0] is EVERYTHING_WILL_BURN:
+
+                # Cleanup
+                if throttling:
+                    for timer in timers.items():
+                        timer.cancel()
+
                 _, (_, e, trace) = result
                 raise e.with_traceback(trace)
 

@@ -39,5 +39,17 @@ def sleeper(job):
     time.sleep(job[1] * 10)
     return job
 
+print('Unordered')
+t = time.time()
 for result in imap_unordered(HOMEGENEOUS_DATA, sleeper, 3, group_throttle=5, group=itemgetter(0)):
-    print(result)
+    n = time.time()
+    print(result, n - t)
+    t = n
+print()
+
+print('Ordered')
+t = time.time()
+for result in imap(HOMEGENEOUS_DATA, sleeper, 3, group_throttle=5, group=itemgetter(0)):
+    n = time.time()
+    print(result, n - t)
+    t = n
