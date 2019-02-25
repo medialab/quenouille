@@ -351,7 +351,7 @@ def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
         iterable, func, threads, ordered=ordered,
         group_parallelism=group_parallelism, group=group,
         group_buffer_size=group_buffer_size, group_throttle=group_throttle,
-        listener=None)
+        listener=listener)
 
 
 def imap_unordered(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
