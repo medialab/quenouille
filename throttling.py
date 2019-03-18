@@ -49,7 +49,7 @@ print()
 
 print('Ordered')
 t = time.time()
-for result in imap(HOMEGENEOUS_DATA, sleeper, 3, group_throttle=5, group=itemgetter(0)):
+for result in imap(HOMEGENEOUS_DATA, sleeper, 3, group_throttle=5, group_throttle_entropy=0.5, group=itemgetter(0)):
     n = time.time()
     print(result, n - t)
     t = n
