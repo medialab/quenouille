@@ -211,7 +211,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             # All threads ended? Let's signal the output queue
             if finished_counter == threads:
-                output_queue.put(THE_END_IS_NIGH, timeout=FOREVER)
+                output_queue.put((None, THE_END_IS_NIGH), timeout=FOREVER)
 
         # We do have another job to do, let's signal the input queue
         else:
@@ -295,7 +295,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                     last_index_condition.notify_all()
 
             # Piping into output queue
-            output_queue.put(result, timeout=FOREVER)
+            output_queue.put((None, result), timeout=FOREVER)
             input_queue.task_done()
 
             # Enqueuing next
@@ -316,10 +316,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         """
 
         while True:
-            result = output_queue.get(timeout=FOREVER)
+            error, result = output_queue.get(timeout=FOREVER)
 
             # An exception was thrown!
-            if isinstance(result, tuple) and result[0] is EVERYTHING_MUST_BURN:
+            if error is EVERYTHING_MUST_BURN:
 
                 # Cleanup
                 if throttling:
@@ -327,10 +327,11 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                         if isinstance(timer, Timer):
                             timer.cancel()
 
-                _, (_, e, trace) = result
+                _, e, trace = result
+
                 raise e.with_traceback(trace)
 
-            # The end is night!
+            # The end is nigh!
             if result is THE_END_IS_NIGH:
                 break
 
