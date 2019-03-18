@@ -6,7 +6,7 @@
 #
 from quenouille import imap_unordered
 
-DATA = range(1000)
+DATA = range(3000)
 
 def worker(i):
     return i

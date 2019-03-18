@@ -151,62 +151,71 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             else:
                 worked_groups[last_group] -= 1
 
-        # Checking the buffers
-        if handling_group_parallelism:
-            current_group, buffer = next(
-                ((k, b) for k, b in buffers.items() if worked_groups[k] < group_parallelism),
-                (None, None)
-            )
+        # NOTE: this loop is necessary to avoid recursion & stack overflow
+        recurse = True
 
-            if buffer is not None:
-                if current_group in waiters:
-                    w = waiters[current_group]
-                    w.popleft().set()
+        while recurse:
+            recurse = False
 
-                    if len(w) == 0:
-                        del waiters[current_group]
-
-                    job = buffer.get(timeout=FOREVER)
-
-                elif not buffer.empty():
-                    job = buffer.get_nowait()
-
-                    if buffer.empty():
-                        del buffers[current_group]
-
-        # Not suitable buffer found, let's consume the iterable!
-        while job is None:
-            job = next(safe_iterator, None)
-
-            if job is None:
-                break
-
-            # Do we need to increment counters?
+            # Checking the buffers
             if handling_group_parallelism:
-                current_group = get_group(job)
+                current_group, buffer = next(
+                    ((k, b) for k, b in buffers.items() if worked_groups[k] < group_parallelism),
+                    (None, None)
+                )
 
-                # Is current group full?
-                if worked_groups[current_group] >= group_parallelism:
-                    buffer = buffers[current_group]
+                if buffer is not None:
+                    if current_group in waiters:
+                        w = waiters[current_group]
+                        w.popleft().set()
 
-                    if not buffer.full():
-                        buffer.put_nowait(job)
+                        if len(w) == 0:
+                            del waiters[current_group]
 
+                        job = buffer.get(timeout=FOREVER)
+
+                    elif not buffer.empty():
+                        job = buffer.get_nowait()
+
+                        if buffer.empty():
+                            del buffers[current_group]
+
+            # Not suitable buffer found, let's consume the iterable!
+            while job is None:
+                job = next(safe_iterator, None)
+
+                if job is None:
+                    break
+
+                # Do we need to increment counters?
+                if handling_group_parallelism:
+                    current_group = get_group(job)
+
+                    # Is current group full?
+                    if worked_groups[current_group] >= group_parallelism:
+                        buffer = buffers[current_group]
+
+                        if not buffer.full():
+                            buffer.put_nowait(job)
+
+                            job = None
+                            continue
+
+                        waiter = Event()
+                        waiters[current_group].append(waiter)
+
+                        enqueue_lock.release()
+
+                        waiter.wait()
+                        buffer.put(job, timeout=FOREVER)
+
+                        # Here we re-acquire the lock and simulate recursion
+                        enqueue_lock.acquire()
+                        recurse = True
                         job = None
-                        continue
-
-                    waiter = Event()
-                    waiters[current_group].append(waiter)
-
-                    enqueue_lock.release()
-
-                    waiter.wait()
-                    buffer.put(job, timeout=FOREVER)
-
-                    return enqueue()
-                break
-            else:
-                break
+                    break
+                else:
+                    break
 
         # If we don't have any job left, we count towards the end
         if job is None:
