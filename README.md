@@ -20,7 +20,7 @@ pip install quenouille
 
 Function lazily consuming an iterator and applying the desired function over the yielded items in a multithreaded fashion. The function will yield results in an order consistent with the provided iterator.
 
-Furthermore, it's possible to tweak options regarding group parallelism if you ever need to ensure that a limited number of threads may perform their taks over the same group, e.g. a domain name when fetching urls: you can give a function extracting the group from the current taks, you can tweak the maximum number of threads working on a same group and finally you can edit a group's buffer size to let the function load more values into memory in hope of finding next ones it can process without needing to wait.
+Furthermore, it's possible to tweak options regarding group parallelism if you ever need to ensure that a limited number of threads may perform their tasks over the same group, e.g. a domain name when fetching urls: you can give a function extracting the group from the current task, you can tweak the maximum number of threads working on a same group and finally you can edit a group's buffer size to let the function load more values into memory in hope of finding next ones it can process without needing to wait.
 
 If you don't care about output order and want snappier performance, the library also exports an [`imap_unordered`](#imap_unordered) method.
 
@@ -61,7 +61,7 @@ with open(csv_path, 'r') as f:
 
 Function lazily consuming an iterator and applying the desired function over the yielded items in a multithreaded fashion. The function will yield results in arbitrary order based on thread completion.
 
-Furthermore, it's possible to tweak options regarding group parallelism if you ever need to ensure that a limited number of threads may perform their taks over the same group, e.g. a domain name when fetching urls: you can give a function extracting the group from the current taks, you can tweak the maximum number of threads working on a same group and finally you can edit a group's buffer size to let the function load more values into memory in hope of finding next ones it can process without needing to wait.
+Furthermore, it's possible to tweak options regarding group parallelism if you ever need to ensure that a limited number of threads may perform their tasks over the same group, e.g. a domain name when fetching urls: you can give a function extracting the group from the current task, you can tweak the maximum number of threads working on a same group and finally you can edit a group's buffer size to let the function load more values into memory in hope of finding next ones it can process without needing to wait.
 
 If output order is important to you, the library also exports an [`imap`](#imap) method.
 
