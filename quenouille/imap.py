@@ -330,6 +330,16 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         for _ in range(threads):
             enqueue()
 
+    def cleanup():
+        """
+        Function that should be called to correctly cleanup threads, timers
+        and other resources.
+        """
+        if throttling:
+            for timer in timers.items():
+                if isinstance(timer, Timer):
+                    timer.cancel()
+
     def output():
         """
         Output generator function returned to provide an iterator to the
@@ -343,10 +353,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             if error is EVERYTHING_MUST_BURN:
 
                 # Cleanup
-                if throttling:
-                    for timer in timers.items():
-                        if isinstance(timer, Timer):
-                            timer.cancel()
+                cleanup()
 
                 _, e, trace = result
 
