@@ -11,9 +11,6 @@ clean:
 	find . -name "*.pyc" | xargs rm
 	find . -name __pycache__ | xargs rm -rf
 
-ftest:
-	python cases.py
-
 lint:
 	@echo Linting source code using pep8...
 	pycodestyle --ignore E501,E722,E731 $(SOURCE) test
