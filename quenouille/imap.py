@@ -226,7 +226,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             finished_counter += 1
 
             # All threads ended? Let's signal the output queue
-            if finished_counter == threads:
+            if finished_counter >= threads:
+
+                # NOTE: should this be a put_nowait?
                 output_queue.put((None, THE_END_IS_NIGH), timeout=FOREVER)
 
         # We do have another job to do, let's signal the input queue
