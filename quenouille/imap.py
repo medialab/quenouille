@@ -231,6 +231,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                 # NOTE: should this be a put_nowait?
                 output_queue.put((None, THE_END_IS_NIGH), timeout=FOREVER)
 
+            return THE_END_IS_NIGH
+
         # We do have another job to do, let's signal the input queue
         else:
             if handling_group_parallelism:
@@ -304,6 +306,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             try:
                 result = func(data)
             except BaseException:
+
+                # TODO: return something else to correctly end worker?
+                # TODO: what if break? what if error?
                 return output_queue.put_nowait(
                     (EVERYTHING_MUST_BURN, sys.exc_info())
                 )
@@ -322,7 +327,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             input_queue.task_done()
 
             # Enqueuing next
-            enqueue(job)
+            status = enqueue(job)
+
+            if status is THE_END_IS_NIGH:
+                return
 
     def boot():
         """
