@@ -371,6 +371,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             # The end is nigh!
             if result is THE_END_IS_NIGH:
+
+                # Cleanup
+                cleanup()
                 break
 
             # NOTE: not completely sure this lock is needed.
