@@ -237,7 +237,6 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         # We do have another job to do, let's signal the input queue
         else:
             if handling_group_parallelism:
-                assert current_group is not None
                 worked_groups[current_group] += 1
 
             # Releasing the lock
