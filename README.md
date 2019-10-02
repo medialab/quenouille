@@ -49,7 +49,7 @@ with open(csv_path, 'r') as f:
 * **group** *?callable* [`None`]: Function taking a single item yielded by the provided iterable and returning its group.
 * **group_parallelism** *?int* [`Infinity`]: Maximum number of threads that can work on the same group at once. Defaults to no limit. This option requires that you give a function as the `group` argument.
 * **group_buffer_size** *?int* [`1`]: Maximum number of values that will be loaded into memory from the iterable before waiting for other relevant threads to be available.
-* **group_throttle** *?float* [`0`]: throttle time to wait (in seconds) between two tasks on the same group.
+* **group_throttle** *?float|?callable* [`0`]: throttle time to wait (in seconds) between two tasks on the same group. Can also be a function taking the group and item and returning throttle time.
 * **group_throttle_entropy** *?float* [`0`]: additional random throttle time between `0` and given value. Useful to simulate erratic behavior.
 * **listener** *callable* [`None`]: A function called on certain events with the name of the event and the related item.
 
@@ -90,7 +90,7 @@ with open(csv_path, 'r') as f:
 * **group** *?callable* [`None`]: Function taking a single item yielded by the provided iterable and returning its group.
 * **group_parallelism** *?int* [`Infinity`]: Maximum number of threads that can work on the same group at once. Defaults to no limit. This option requires that you give a function as the `group` argument.
 * **group_buffer_size** *?int* [`1`]: Maximum number of values that will be loaded into memory from the iterable before waiting for other relevant threads to be available.
-* **group_throttle** *?float* [`0`]: throttle time to wait (in seconds) between two tasks on the same group.
+* **group_throttle** *?float|?callable* [`0`]: throttle time to wait (in seconds) between two tasks on the same group. Can also be a function taking the group and item and returning throttle time.
 * **group_throttle_entropy** *?float* [`0`]: additional random throttle time between `0` and given value. Useful to simulate erratic behavior.
 * **listener** *callable* [`None`]: A function called on certain events with the name of the event and the related item.
 

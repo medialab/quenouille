@@ -120,3 +120,25 @@ class TestImap(object):
 
         assert len(results) == len(DATA)
         assert set(results) == set(DATA)
+
+    def test_throttle(self):
+
+        group = lambda x: 'SAME'
+
+        nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=0.1))
+
+        assert nbs == set(range(10))
+
+    def test_function_throttle(self):
+
+        def throttling(group, nb):
+            if group == 'odd':
+                return None
+
+            return 0.1
+
+        group = lambda x: 'even' if x % 2 == 0 else 'odd'
+
+        nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=throttling))
+
+        assert nbs == set(range(10))

@@ -55,8 +55,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         group_buffer_size (int, optional): Max number of jobs that the function
             will buffer into memory when waiting for a thread to be available.
             Defaults to 1.
-        group_throttle (float, optional): Optional throttle time to wait
-            between each task per group.
+        group_throttle (float or callable, optional): Optional throttle time to
+            wait between each task per group. Can also be a function taking
+            the group & current item and returning the throttle time.
         group_throttle_entropy (float, optional): Optional random time between 0
             and chosen value to wait in addition to `group_throttle`. Defaults
             to no entropy.
@@ -81,8 +82,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     if not isinstance(group_buffer_size, (int, float)) or group_buffer_size < 1:
         raise TypeError('quenouille/imap: `group_buffer_size` should be a positive number.')
 
-    if group_throttle != 0 and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
-        raise TypeError('quenouille/imap: `group_throttle` should be >= 0.')
+    if not callable(group_throttle) and group_throttle != 0 and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
+        raise TypeError('quenouille/imap: `group_throttle` should be >= 0 or a function.')
 
     if group_throttle_entropy != 0 and (not isinstance(group_throttle_entropy, (int, float)) or group_throttle_entropy < 0):
         raise TypeError('quenouille/imap: `group_throttle_entropy` should be >= 0.')
@@ -291,7 +292,15 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             if throttling:
                 with timer_condition:
 
-                    throttle_time = group_throttle
+                    throttle_time = (
+                        (group_throttle(get_group(job), data) or 0)
+                        if callable(group_throttle)
+                        else group_throttle
+                    )
+
+                    # NOTE: if throttle_time is 0, we could avoid using the timer
+
+                    assert isinstance(throttle_time, (int, float))
 
                     if group_throttle_entropy != 0:
                         throttle_time += random() * group_throttle_entropy
