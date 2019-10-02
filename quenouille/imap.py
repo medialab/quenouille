@@ -391,6 +391,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         thread.start()
 
     next_tick = Timer(SOON, boot)
+    next_tick.daemon = True
     next_tick.start()
 
     return output()
