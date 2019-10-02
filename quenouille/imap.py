@@ -113,6 +113,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     enqueue_lock = Lock()
     listener_lock = Lock()
     yield_lock = Lock()
+    termination_event = Event()
     timer_condition = Condition()
     worked_groups = Counter()
     buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
@@ -256,7 +257,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         """
         nonlocal last_index
 
-        while True:
+        while not termination_event.is_set():
             g, job = input_queue.get(timeout=FOREVER)
 
             if job is None:
@@ -345,6 +346,8 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         Function that should be called to correctly cleanup threads, timers
         and other resources.
         """
+        termination_event.set()
+
         if throttling:
             for timer in timers.items():
                 if isinstance(timer, Timer):
