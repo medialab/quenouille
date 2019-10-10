@@ -4,7 +4,7 @@ with open('./README.md', 'r') as f:
     long_description = f.read()
 
 setup(name='quenouille',
-      version='0.4.0',
+      version='0.5.0',
       description='A library of multithreaded iterator workflows.',
       long_description=long_description,
       long_description_content_type='text/markdown',
