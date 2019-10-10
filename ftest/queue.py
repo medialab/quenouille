@@ -12,7 +12,7 @@ def consume(iterator):
     for _ in iterator:
         pass
 
-def queue_to_iteraror(q):
+def queue_to_iterator(q):
     while not q.empty():
         yield q.get()
 
@@ -20,4 +20,4 @@ def worker(payload):
     time.sleep(payload)
     print('Done waiting %i' % payload)
 
-consume(imap_unordered(queue_to_iteraror(queue), worker, 1))
+consume(imap_unordered(queue_to_iterator(queue), worker, 1))
