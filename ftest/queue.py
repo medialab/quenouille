@@ -15,6 +15,7 @@ def consume(iterator):
 def queue_to_iterator(q):
     while not q.empty():
         yield q.get()
+        q.task_done()
 
 def worker(payload):
     time.sleep(payload)
