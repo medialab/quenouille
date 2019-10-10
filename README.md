@@ -15,6 +15,7 @@ pip install quenouille
 ## Usage
 * [imap](#imap)
 * [imap_unordered](#imapunordered)
+* [iter_queue](#iter_queue)
 
 ### imap
 
@@ -97,3 +98,26 @@ with open(csv_path, 'r') as f:
 *Events*
 
 * **start**: Emitted when the given function actually starts to work on a yielded item.
+
+### iter_queue
+
+Return an iterator over the given queue's values.
+
+```python
+from queue import Queue
+from quenouille import iter_queue
+
+q = Queue()
+
+q.put(2)
+q.put(1)
+q.put(3)
+
+for n in iter_queue(q):
+  print(n)
+```
+
+*Arguments*
+
+* **queue** *Queue*: queue instance.
+* **timeout** *?float* [`FOREVER`]: timeout for `#.get`. By default, the timeout is set to a very high number not to block `KeyboardInterrupt` and such.
