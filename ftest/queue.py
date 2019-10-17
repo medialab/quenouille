@@ -1,6 +1,6 @@
 import time
 from queue import Queue
-from quenouille import imap_unordered, iter_queue
+from quenouille import imap_unordered, QueueIterator
 
 queue = Queue()
 
@@ -13,8 +13,11 @@ def worker(payload):
 
     return payload
 
-for i, t in imap_unordered(enumerate(iter_queue(queue)), worker, 1):
-    print('Done waiting %i' % t)
+iterator = QueueIterator(queue)
 
-    if i < 1:
-        queue.put(4)
+for i, t in imap_unordered(enumerate(iterator), worker, 1):
+    with iterator:
+        print('Done waiting %i' % t)
+
+        if i < 1:
+            queue.put(4)
