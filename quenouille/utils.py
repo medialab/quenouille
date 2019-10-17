@@ -29,6 +29,9 @@ class QueueIterator(object):
 
             self.event.set()
 
+    def task_done(self):
+        return self.dec()
+
     def threads_still_working(self):
         return self.working_threads != 0
 
