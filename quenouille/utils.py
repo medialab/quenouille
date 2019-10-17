@@ -8,12 +8,6 @@ from threading import Lock, Event
 from quenouille.constants import FOREVER
 
 
-def iter_queue(queue, timeout=FOREVER):
-    while not queue.empty():
-        yield queue.get(timeout=timeout)
-        queue.task_done()
-
-
 class QueueIterator(object):
     def __init__(self, queue):
         self.queue = queue
