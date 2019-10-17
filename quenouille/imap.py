@@ -173,7 +173,11 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
             # Not suitable buffer found, let's consume the iterable!
             while job is None:
+
+                # Avoiding a deadlock if the iterator needs to block
+                enqueue_lock.release()
                 job = next(safe_iterator, None)
+                enqueue_lock.acquire()
 
                 if job is None:
                     break
