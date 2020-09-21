@@ -349,6 +349,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         """
         termination_event.set()
 
+        for t in pool:
+            input_queue.put_nowait((None, None))
+            t.join()
+
         if throttling:
             for timer in timers.items():
                 if isinstance(timer, Timer):
