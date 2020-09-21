@@ -16,6 +16,8 @@ pip install quenouille
 * [imap](#imap)
 * [imap_unordered](#imapunordered)
 
+* [Caveats](#caveats)
+
 ### imap
 
 Function lazily consuming an iterator and applying the desired function over the yielded items in a multithreaded fashion. The function will yield results in an order consistent with the provided iterator.
@@ -97,3 +99,9 @@ with open(csv_path, 'r') as f:
 *Events*
 
 * **start**: Emitted when the given function actually starts to work on a yielded item.
+
+### Caveats
+
+*On having more threads than the size of the consumed iterator*
+
+This should be safe but note that it can have a slight performance cost related to the fact that the library will allocate and terminate threads that won't be used anyway. So you should probably clamp the number of threads based upon the size of your iterator if you know it beforehand (and use a condition not to call `imap` etc. on an empty iterator, for instance).
