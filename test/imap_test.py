@@ -3,6 +3,7 @@
 # =============================================================================
 import time
 import pytest
+import threading
 from collections import defaultdict
 from operator import itemgetter
 from quenouille import imap, imap_unordered
@@ -69,6 +70,11 @@ class TestImap(object):
         results = list(imap_unordered(DATA[:1], sleeper, 2))
 
         assert results == [('A', 0.3, 0)]
+
+    def test_empty(self):
+        results = list(imap_unordered(iter([]), sleeper, 5))
+
+        assert results == []
 
     def test_ordered(self):
 
