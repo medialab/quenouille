@@ -253,7 +253,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         while not termination_event.is_set():
             g, job = input_queue.get(timeout=FOREVER)
 
-            if job is None:
+            if job is THE_END_IS_NIGH:
                 break
 
             index, data = job
@@ -350,7 +350,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         termination_event.set()
 
         for t in pool:
-            input_queue.put_nowait((None, None))
+            input_queue.put_nowait((None, THE_END_IS_NIGH))
+
+        # Threads must be join AFTER having sent the signal
+        for t in pool:
             t.join()
 
         if throttling:
