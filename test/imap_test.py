@@ -65,6 +65,11 @@ class TestImap(object):
 
         assert results == [('A', 0.2, 1), ('A', 0.3, 0)]
 
+    def test_one(self):
+        results = list(imap_unordered(DATA[:1], sleeper, 2))
+
+        assert results == [('A', 0.3, 0)]
+
     def test_ordered(self):
 
         results = list(imap(DATA, sleeper, 2))
