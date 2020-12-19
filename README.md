@@ -15,7 +15,6 @@ pip install quenouille
 ## Usage
 * [imap](#imap)
 * [imap_unordered](#imapunordered)
-
 * [Caveats](#caveats)
 
 ### imap
