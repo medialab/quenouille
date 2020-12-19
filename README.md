@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/medialab/quenouille.svg)](https://travis-ci.org/medialab/quenouille)
+[![Build Status](https://github.com/medialab/quenouille/workflows/Tests/badge.svg)](https://github.com/medialab/quenouille/actions)
 
 # Quenouille
 
