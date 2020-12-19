@@ -4,9 +4,10 @@
 #
 # Handy constants.
 #
+import threading
 
-# Basically a year. Useful to avoid known issues with queue blocking
-FOREVER = 365 * 24 * 60 * 60
+# Useful to avoid known issues with queue blocking
+FOREVER = threading.TIMEOUT_MAX
 
 # A small async sleep value
 SOON = 0.0001

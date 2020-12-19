@@ -13,7 +13,7 @@ setup(name='quenouille',
       author='Guillaume Plique',
       author_email='kropotkinepiotr@gmail.com',
       keywords='url',
-      python_requires='>=3.0',
+      python_requires='>=3.3',
       packages=find_packages(exclude=['test']),
       package_data={'docs': ['README.md']},
       zip_safe=True)
