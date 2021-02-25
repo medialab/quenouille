@@ -18,7 +18,7 @@ class QueueIterator(object):
     def inc(self):
         with self.lock:
             self.working_threads += 1
-            self.event.clear()
+            self.event.set()
 
     def dec(self):
         with self.lock:
@@ -49,6 +49,7 @@ class QueueIterator(object):
 
             # The queue is empty but some threads are still working, we need to wait
             if self.queue.qsize() == 0:
+                self.event.clear()
                 self.event.wait()
                 continue
 
