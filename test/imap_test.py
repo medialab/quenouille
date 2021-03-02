@@ -153,3 +153,14 @@ class TestImap(object):
         nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=throttling))
 
         assert nbs == set(range(10))
+
+    def test_raise(self):
+        def hellraiser(i):
+            if i > 5:
+                raise RuntimeError
+
+            return i
+
+        with pytest.raises(RuntimeError):
+            for i in imap(range(10), hellraiser, 1):
+                pass
