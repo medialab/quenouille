@@ -164,3 +164,7 @@ class TestImap(object):
         with pytest.raises(RuntimeError):
             for i in imap(range(10), hellraiser, 1):
                 pass
+
+        with pytest.raises(RuntimeError):
+            for i in imap(range(6, 15), hellraiser, 4):
+                pass

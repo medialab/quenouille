@@ -5,7 +5,7 @@
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
 import sys
-from queue import Queue
+from queue import Queue, Full
 from random import random
 from collections import defaultdict, deque, Counter
 from threading import Condition, Event, Lock, Thread, Timer
@@ -350,7 +350,10 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         termination_event.set()
 
         for t in pool:
-            input_queue.put_nowait((None, THE_END_IS_NIGH))
+            try:
+                input_queue.put_nowait((None, THE_END_IS_NIGH))
+            except Full:
+                break
 
         # Threads must be join AFTER having sent the signal
         for t in pool:
