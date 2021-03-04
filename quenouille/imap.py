@@ -291,26 +291,27 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                         else group_throttle
                     )
 
-                    # NOTE: if throttle_time is 0, we could avoid using the timer
-
                     assert isinstance(throttle_time, (int, float))
 
-                    if group_throttle_entropy != 0:
-                        throttle_time += random() * group_throttle_entropy
+                    timer = None
 
-                    # NOTE: we could improve the precision of the timer if needed
-                    timer = Timer(throttle_time, release_throttled, args=(g, ))
-                    timers[g] = timer
+                    if throttle_time != 0:
+                        if group_throttle_entropy != 0:
+                            throttle_time += random() * group_throttle_entropy
 
-                timer.start()
+                        # NOTE: we could improve the precision of the timer if needed
+                        timer = Timer(throttle_time, release_throttled, args=(g, ))
+                        timers[g] = timer
+
+                if timer is not None:
+                    timer.start()
+                else:
+                    release_throttled(g)
 
             # Performing actual work
             try:
                 result = func(data)
             except BaseException:
-
-                # TODO: return something else to correctly end worker?
-                # TODO: what if break? what if error?
                 return output_queue.put_nowait(
                     (EVERYTHING_MUST_BURN, sys.exc_info())
                 )
