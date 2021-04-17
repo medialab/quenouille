@@ -116,13 +116,13 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             with listener_lock:
                 listener(event, job)
 
-    def enqueue(last_job=None):
+    def enqueue(last_group=None):
         """
         Function consuming the iterable to pipe next job into the input queue
         for the workers.
 
         Args:
-            last_job (any): Last performed job. Useful to track limits etc.
+            last_group (any): Last performed job's group. Useful to track limits etc.
 
         """
         nonlocal finished_counter
@@ -131,12 +131,9 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         enqueue_lock.acquire()
 
         job = None
-        last_group = None
         current_group = None
 
-        if last_job is not None and handling_group_parallelism:
-            last_group = groupgetter(last_job)
-
+        if last_group is not None and handling_group_parallelism:
             if worked_groups[last_group] == 1:
                 del worked_groups[last_group]
             else:
@@ -330,7 +327,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
             input_queue.task_done()
 
             # Enqueuing next
-            status = enqueue(job)
+            status = enqueue(g)
 
             if status is THE_END_IS_NIGH:
                 return
