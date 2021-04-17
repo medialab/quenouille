@@ -283,7 +283,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                 with timer_condition:
 
                     throttle_time = (
-                        (group_throttle(groupgetter(job), data) or 0)
+                        (group_throttle(g, data) or 0)
                         if callable(group_throttle)
                         else group_throttle
                     )
