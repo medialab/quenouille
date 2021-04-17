@@ -76,7 +76,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     if handling_group_parallelism and not callable(group):
         raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism` or `group_throttle`')
 
-    groupgetter = lambda x: group(x[1])
+    getgroup = lambda x: group(x[1])
 
     # Making our iterable a thread-safe iterator
     safe_iterator = ThreadSafeIterator(enumerate(iterable))
@@ -174,7 +174,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
                 # Do we need to increment counters?
                 if handling_group_parallelism:
-                    current_group = groupgetter(job)
+                    current_group = getgroup(job)
 
                     # Is current group full?
                     if worked_groups[current_group] >= group_parallelism:
