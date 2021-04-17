@@ -25,8 +25,7 @@ from quenouille.constants import (
 # The implementation
 # -----------------------------------------------------------------------------
 def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                 group=None, group_buffer_size=1, group_throttle=0, group_throttle_entropy=0,
-                 listener=None):
+                 group=None, group_buffer_size=1, group_throttle=0, listener=None):
     """
     Function consuming tasks from any iterable, dispatching them to a pool
     of threads and finally yielding the produced results.
@@ -47,9 +46,6 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         group_throttle (float or callable, optional): Optional throttle time to
             wait between each task per group. Can also be a function taking
             the group & current item and returning the throttle time.
-        group_throttle_entropy (float, optional): Optional random time between 0
-            and chosen value to wait in addition to `group_throttle`. Defaults
-            to no entropy.
         listener (callable, optional): Function that will be called when
             some events occur to be able to track progress.
 
@@ -73,9 +69,6 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     if not callable(group_throttle) and group_throttle != 0 and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
         raise TypeError('quenouille/imap: `group_throttle` should be >= 0 or a function.')
-
-    if group_throttle_entropy != 0 and (not isinstance(group_throttle_entropy, (int, float)) or group_throttle_entropy < 0):
-        raise TypeError('quenouille/imap: `group_throttle_entropy` should be >= 0.')
 
     if listener is not None and not callable(listener):
         raise TypeError('quenouille/imap: `listener` should be callable if provided.')
@@ -293,9 +286,6 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
                     timer = None
 
                     if throttle_time != 0:
-                        if group_throttle_entropy != 0:
-                            throttle_time += random() * group_throttle_entropy
-
                         # NOTE: we could improve the precision of the timer if needed
                         timer = Timer(throttle_time, release_throttled, args=(g, ))
                         timers[g] = timer
@@ -413,26 +403,24 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 # with the built-in `help` function so well. I am also not using `*args` and
 # `**kwargs` to make it easy on tooling...
 def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
-         group=None, group_buffer_size=1, group_throttle=0, group_throttle_entropy=0,
-         listener=None):
+         group=None, group_buffer_size=1, group_throttle=0, listener=None):
 
     return generic_imap(
         iterable, func, threads, ordered=ordered,
         group_parallelism=group_parallelism, group=group,
         group_buffer_size=group_buffer_size,
-        group_throttle=group_throttle, group_throttle_entropy=group_throttle_entropy,
+        group_throttle=group_throttle,
         listener=listener)
 
 
 def imap_unordered(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                   group=None, group_buffer_size=1, group_throttle=0, group_throttle_entropy=0,
-                   listener=None):
+                   group=None, group_buffer_size=1, group_throttle=0, listener=None):
 
     return generic_imap(
         iterable, func, threads, ordered=ordered,
         group_parallelism=group_parallelism, group=group,
         group_buffer_size=group_buffer_size,
-        group_throttle=group_throttle, group_throttle_entropy=group_throttle_entropy,
+        group_throttle=group_throttle,
         listener=listener)
 
 
