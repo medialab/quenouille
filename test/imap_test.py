@@ -6,7 +6,7 @@ import pytest
 import threading
 from collections import defaultdict
 from operator import itemgetter
-from quenouille import imap_unordered
+from quenouille import imap_unordered, imap
 
 DATA = [
     ('A', 0.3, 0),
@@ -76,11 +76,11 @@ class TestImap(object):
 
     #     assert results == []
 
-    # def test_ordered(self):
+    def test_ordered(self):
 
-    #     results = list(imap(DATA, sleeper, 2))
+        results = list(imap(DATA, sleeper, 2))
 
-    #     assert results == DATA
+        assert results == DATA
 
     # def test_group_parallelism(self):
 
