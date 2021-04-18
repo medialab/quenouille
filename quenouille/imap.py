@@ -15,6 +15,7 @@ Result = namedtuple('Result', ['exception', 'job', 'value'])
 
 # TODO: fully document this complex code...
 # TODO: test two executor successive imap calls
+# TODO: add unit test with blocking iterator
 
 
 class IterationState(object):
@@ -66,6 +67,7 @@ class LazyGroupedThreadPoolExecutor(object):
         self.job_queue = Queue(maxsize=max_workers)
         self.output_queue = Queue()
         self.teardown_event = Event()
+        self.closed = False
 
         self.threads = [
             Thread(target=self.__worker, daemon=True)
@@ -82,6 +84,9 @@ class LazyGroupedThreadPoolExecutor(object):
         self.__teardown()
 
     def __teardown(self):
+        if self.closed:
+            return
+
         self.teardown_event.set()
 
         for thread in self.threads:
@@ -95,6 +100,8 @@ class LazyGroupedThreadPoolExecutor(object):
 
         for thread in self.threads:
             thread.join()
+
+        self.closed = True
 
     def __worker(self):
         while not self.teardown_event.is_set():
