@@ -7,13 +7,11 @@
 import sys
 from queue import Queue
 from threading import Thread, Event, Lock, Condition
-from collections import namedtuple, OrderedDict
+from collections import OrderedDict
 from itertools import count
 
 from quenouille.utils import get, put, clear, flush, ThreadSafeIterator
 from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
-
-Result = namedtuple('Result', ['exc_info', 'job', 'value'])
 
 # TODO: fully document this complex code...
 # TODO: test two executor successive imap calls
@@ -24,27 +22,27 @@ Result = namedtuple('Result', ['exc_info', 'job', 'value'])
 # TODO: lazy thread init?
 # TODO: type checking in imap function also for convenience
 # TODO: still test the iterator to queue (reverse than the current queue to iterator, with blocking)
-# TODO: maybe the conditions in OrderedResultQueue and Buffer must be shuntable
+# TODO: maybe the conditions in OrderedOutputQueue and Buffer must be shuntable
 # TODO: there seems to be room for improvement regarding keyboardinterrupts etc. wrapping enqueue + __worker?
 # TODO: validate iterable, func, threads
 # TODO: transfer doctypes from imap_old
 
 
-class OrderedResultQueue(Queue):
+class OrderedOutputQueue(Queue):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.last_index = 0
         self.condition = Condition()
 
-    def put(self, result, *args, **kwargs):
+    def put(self, job, *args, **kwargs):
         with self.condition:
-            while self.last_index != result.job.index:
+            while self.last_index != job.index:
                 self.condition.wait()
 
             self.last_index += 1
             self.condition.notify_all()
 
-        return super().put(result, *args, **kwargs)
+        return super().put(job, *args, **kwargs)
 
 
 class IterationState(object):
@@ -78,14 +76,14 @@ class Job(object):
         self.kwargs = kwargs
         self.index = index
         self.group = group
+        self.result = None
+        self.exc_info = None
 
     def __call__(self):
         try:
-            value = self.func(*self.args, **self.kwargs)
+            self.result = self.func(*self.args, **self.kwargs)
         except BaseException as e:
-            return Result(sys.exc_info(), self, None)
-
-        return Result(None, self, value)
+            self.exc_info = sys.exc_info()
 
 
 class Buffer(object):
@@ -126,7 +124,7 @@ class Buffer(object):
         """
         self.lock.acquire()
 
-        assert len(self.item) <= self.maxsize
+        assert len(self.items) <= self.maxsize
 
         if len(self.items) == self.maxsize:
             self.lock.release()
@@ -257,14 +255,14 @@ class LazyGroupedThreadPoolExecutor(object):
                 self.job_queue.task_done()
                 break
 
-            result = job()
+            job()
             self.job_queue.task_done()
-            put(self.output_queue, result)
+            put(self.output_queue, job)
 
     def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
                buffer_size=DEFAULT_BUFFER_SIZE):
         iterator = ThreadSafeIterator(iterable)
-        self.output_queue = Queue() if not ordered else OrderedResultQueue()
+        self.output_queue = Queue() if not ordered else OrderedOutputQueue()
 
         # State
         job_counter = count()
@@ -286,7 +284,17 @@ class LazyGroupedThreadPoolExecutor(object):
                         state.declare_end()
                         break
 
-                    job = Job(func, args=(item,), index=next(job_counter))
+                    group = None
+
+                    if key is not None:
+                        group = key(item)
+
+                    job = Job(
+                        func,
+                        args=(item,),
+                        index=next(job_counter),
+                        group=group
+                    )
 
                     if not buffer.can_work(job):
                         buffer.put(job)
@@ -299,19 +307,19 @@ class LazyGroupedThreadPoolExecutor(object):
 
         def output():
             while not state.should_stop() and not self.teardown_event.is_set():
-                result = get(self.output_queue)
+                job = get(self.output_queue)
 
                 # Acknowledging this job was finished
                 self.output_queue.task_done()
                 state.finish_task()
-                buffer.unregister_job(result.job)
+                buffer.unregister_job(job)
 
                 # Raising an error that occurred within worker function
-                if result.exc_info is not None:
-                    raise result.exc_info[1].with_traceback(result.exc_info[2])
+                if job.exc_info is not None:
+                    raise job.exc_info[1].with_traceback(job.exc_info[2])
 
                 # Actually yielding the value to main thread
-                yield result.value
+                yield job.result
 
             # Making sure we are getting rid of the dispatcher thread
             dispatcher.join()
