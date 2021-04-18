@@ -143,7 +143,7 @@ class LazyGroupedThreadPoolExecutor(object):
         state = IterationState()
 
         def enqueue():
-            while True:
+            while not self.teardown_event.is_set():
                 try:
                     item = next(iterator)
                 except StopIteration:
@@ -156,7 +156,7 @@ class LazyGroupedThreadPoolExecutor(object):
                 put(self.job_queue, job)
 
         def output():
-            while not state.should_stop():
+            while not state.should_stop() and not self.teardown_event.is_set():
                 result = get(self.output_queue)
                 state.finish_task()
 

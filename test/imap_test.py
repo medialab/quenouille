@@ -121,16 +121,16 @@ class TestImap(object):
 
     #     assert set(events['start']) == set(DATA)
 
-    # def test_break(self):
+    def test_break(self):
 
-    #     for i in imap(enumerate(DATA), enumerated_sleeper, 5):
-    #         if i == 2:
-    #             break
+        for i in imap(enumerate(DATA), enumerated_sleeper, 5):
+            if i == 2:
+                break
 
-    #     results = list(imap_unordered(DATA, sleeper, 2))
+        results = list(imap_unordered(DATA, sleeper, 2))
 
-    #     assert len(results) == len(DATA)
-    #     assert set(results) == set(DATA)
+        assert len(results) == len(DATA)
+        assert set(results) == set(DATA)
 
     # def test_throttle(self):
 
