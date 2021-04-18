@@ -91,8 +91,12 @@ class LazyGroupedThreadPoolExecutor(object):
         self.closed = False
 
         self.threads = [
-            Thread(target=self.__worker, daemon=True)
-            for _ in range(max_workers)
+            Thread(
+                name='Thread-quenouille-%i-%i' % (id(self), n),
+                target=self.__worker,
+                daemon=True
+            )
+            for n in range(max_workers)
         ]
 
         for thread in self.threads:
@@ -163,7 +167,11 @@ class LazyGroupedThreadPoolExecutor(object):
                 # NOTE: do we need a lock here?
                 yield result.value
 
-        dispatcher = Thread(target=enqueue, daemon=True)
+        dispatcher = Thread(
+            name='Thread-quenouille-%i-dispatcher' % id(self),
+            target=enqueue,
+            daemon=True
+        )
         dispatcher.start()
 
         return output()
