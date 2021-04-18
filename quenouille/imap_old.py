@@ -6,7 +6,6 @@
 #
 import sys
 from queue import Queue, Full
-from random import random
 from collections import defaultdict, deque, Counter
 from threading import Condition, Event, Lock, Thread, Timer
 

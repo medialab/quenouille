@@ -5,9 +5,9 @@
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
 import sys
-from queue import Queue, Full
+from queue import Queue
 from threading import Thread, Event, Lock, Condition
-from collections import namedtuple, deque
+from collections import namedtuple, OrderedDict
 
 from quenouille.utils import get, put, clear, flush, ThreadSafeIterator
 from quenouille.constants import THE_END_IS_NIGH
@@ -68,13 +68,100 @@ class IterationState(object):
             return self.finished and self.finished_count == self.started_count
 
 
+class Buffer(object):
+    def __init__(self, maxsize=0, parallelism=None):
+
+        # Properties
+        self.maxsize = 0
+        self.parallelism = parallelism
+
+        # Threading
+        self.condition = Condition()
+        self.lock = Lock()
+
+        # Containers
+        self.items = OrderedDict()
+        self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
+
+    def __can_work(self, job):
+        if self.parallelism is None:
+            return True
+
+        count = self.worked_groups.get(job.group, 0)
+
+        if count < self.parallelism:
+            return True
+
+        return False
+
+    def can_work(self, job):
+        with self.lock:
+            return self.__can_work(job)
+
+    def put(self, job):
+        """
+        Add a value to the buffer and blocks if the buffer is already full.
+        """
+        self.lock.acquire()
+
+        assert len(self.item) <= self.maxsize
+
+        if len(self.items) == self.maxsize:
+            self.lock.release()
+
+            with self.condition:
+                self.condition.wait()
+
+            self.lock.acquire()
+
+        self.items[id(job)] = job
+
+        self.lock.release()
+
+    def get(self):
+        with self.lock:
+            if len(self.items) == 0:
+                return None
+
+            suitable_job = None
+
+            for job in self.items.values():
+                if self.__can_work(job):
+                    suitable_job = job
+                    break
+
+            return self.items.popitem(id(job))
+
+    def register_job(self, job):
+        with self.lock:
+            group = job.group
+
+            if group not in self.worked_groups:
+                self.worked_groups[group] = 1
+            else:
+                self.worked_groups[group] += 1
+
+    def unregister_job(self, job):
+        with self.lock:
+            group = job.group
+
+            assert group in self.worked_groups
+
+            if self.worked_groups[group] == 1:
+                del self.worked_groups[group]
+            else:
+                self.worked_groups[group] -= 1
+
+        self.condition.notify_all()
+
+
 class Job(object):
-    def __init__(self, func, args, kwargs={}, index=None, key=None):
+    def __init__(self, func, args, kwargs={}, index=None, group=None):
         self.func = func
         self.args = args
         self.kwargs = kwargs
         self.index = index
-        self.key = key
+        self.group = group
 
     def __call__(self):
         try:
