@@ -20,9 +20,9 @@ Result = namedtuple('Result', ['exception', 'job', 'value'])
 # TODO: need a condition wait for the buffer later
 
 
-class OrderedResultQueue(object):
-    def __init__(self):
-        self.q = Queue()
+class OrderedResultQueue(Queue):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.last_index = 0
         self.condition = Condition()
 
@@ -34,10 +34,7 @@ class OrderedResultQueue(object):
             self.last_index += 1
             self.condition.notify_all()
 
-        return self.q.put(result, timeout=timeout)
-
-    def get(self, timeout=None):
-        return self.q.get(timeout=timeout)
+        return super().put(result, timeout=timeout)
 
 
 class IterationState(object):
