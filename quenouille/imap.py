@@ -4,6 +4,7 @@
 #
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
+import sys
 from queue import Queue, Full
 from threading import Thread, Event, Lock, Condition
 from collections import namedtuple, deque
@@ -11,7 +12,7 @@ from collections import namedtuple, deque
 from quenouille.utils import get, put, clear, flush, ThreadSafeIterator
 from quenouille.constants import THE_END_IS_NIGH
 
-Result = namedtuple('Result', ['exception', 'job', 'value'])
+Result = namedtuple('Result', ['exc_info', 'job', 'value'])
 
 # TODO: fully document this complex code...
 # TODO: test two executor successive imap calls
@@ -76,12 +77,12 @@ class Job(object):
         self.key = key
 
     def __call__(self):
+        try:
+            value = self.func(*self.args, **self.kwargs)
+        except BaseException as e:
+            return Result(sys.exc_info(), self, None)
 
-        # TODO: try
-        value = self.func(*self.args, **self.kwargs)
-        result = Result(None, self, value)
-
-        return result
+        return Result(None, self, value)
 
 
 class LazyGroupedThreadPoolExecutor(object):
@@ -177,6 +178,9 @@ class LazyGroupedThreadPoolExecutor(object):
                 result = get(self.output_queue)
                 self.output_queue.task_done()
                 state.finish_task()
+
+                if result.exc_info is not None:
+                    raise result.exc_info[1].with_traceback(result.exc_info[2])
 
                 # NOTE: do we need a lock here?
                 yield result.value

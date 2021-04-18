@@ -138,17 +138,17 @@ class TestImap(object):
 
     #     assert nbs == set(range(10))
 
-    # def test_raise(self):
-    #     def hellraiser(i):
-    #         if i > 5:
-    #             raise RuntimeError
+    def test_raise(self):
+        def hellraiser(i):
+            if i > 5:
+                raise RuntimeError
 
-    #         return i
+            return i
 
-    #     with pytest.raises(RuntimeError):
-    #         for i in imap(range(10), hellraiser, 1):
-    #             pass
+        with pytest.raises(RuntimeError):
+            for i in imap(range(10), hellraiser, 1):
+                pass
 
-    #     with pytest.raises(RuntimeError):
-    #         for i in imap(range(6, 15), hellraiser, 4):
-    #             pass
+        with pytest.raises(RuntimeError):
+            for i in imap(range(6, 15), hellraiser, 4):
+                pass
