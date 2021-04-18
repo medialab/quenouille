@@ -134,6 +134,9 @@ class LazyGroupedThreadPoolExecutor(object):
             for thread in self.threads:
                 thread.join()
 
+            # Clearing the job queue once more to unblock enqueuer
+            clear(self.job_queue)
+
             self.closed = True
 
     def __worker(self):
@@ -177,6 +180,9 @@ class LazyGroupedThreadPoolExecutor(object):
 
                 # NOTE: do we need a lock here?
                 yield result.value
+
+            # Making sure we are getting rid of the dispatcher thread
+            dispatcher.join()
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
