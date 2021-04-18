@@ -14,7 +14,6 @@ from quenouille.thread_safe_iterator import ThreadSafeIterator
 
 from quenouille.constants import (
     FOREVER,
-    SOON,
     THE_END_IS_NIGH,
     EVERYTHING_MUST_BURN,
     THE_WAIT_IS_OVER,
@@ -389,8 +388,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
     for thread in pool:
         thread.start()
 
-    next_tick = Timer(SOON, boot)
-    next_tick.daemon = True
+    next_tick = Thread(target=boot, daemon=True)
     next_tick.start()
 
     return output()
