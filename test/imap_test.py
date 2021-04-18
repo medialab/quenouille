@@ -75,11 +75,11 @@ class TestImap(object):
 
         assert results == DATA
 
-    # def test_group_parallelism(self):
+    def test_group_parallelism(self):
+        pass  # TODO: drop
 
         # Unordered
         # results = list(imap_unordered(DATA, sleeper, 2, parallelism=1, key=itemgetter(0)))
-
         # assert set(results) == set(DATA)
 
         # results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3))

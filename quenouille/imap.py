@@ -26,6 +26,8 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
 # TODO: there seems to be room for improvement regarding keyboardinterrupts etc. wrapping enqueue + __worker?
 # TODO: validate iterable, func, threads
 # TODO: transfer doctypes from imap_old
+# TODO: test buffer_size = 0
+# TODO: test with small buffer sizes
 
 
 class OrderedOutputQueue(Queue):
@@ -90,7 +92,7 @@ class Buffer(object):
     def __init__(self, maxsize=0, parallelism=1):
 
         # Properties
-        self.maxsize = 0
+        self.maxsize = maxsize
         self.parallelism = parallelism
 
         # Threading
@@ -124,7 +126,7 @@ class Buffer(object):
         """
         self.lock.acquire()
 
-        assert len(self.items) <= self.maxsize
+        assert len(self.items) <= self.maxsize, '%i - %i' % (len(self.items), self.maxsize)
 
         if len(self.items) == self.maxsize:
             self.lock.release()
@@ -134,11 +136,12 @@ class Buffer(object):
 
             self.lock.acquire()
 
+        # TODO: for maxsize = 0, return the job instead of setting
         self.items[id(job)] = job
 
         self.lock.release()
 
-    def get(self)-> Job:
+    def get(self):
         with self.lock:
             if len(self.items) == 0:
                 return None
@@ -150,7 +153,10 @@ class Buffer(object):
                     suitable_job = job
                     break
 
-            return self.items.popitem(id(job))
+            if suitable_job is not None:
+                return self.items.popitem(id(job))[1]
+
+            return None
 
     def register_job(self, job: Job):
         with self.lock:
@@ -267,7 +273,7 @@ class LazyGroupedThreadPoolExecutor(object):
         # State
         job_counter = count()
         state = IterationState()
-        buffer = Buffer()
+        buffer = Buffer(maxsize=buffer_size, parallelism=parallelism)
 
         def enqueue():
             while not self.teardown_event.is_set():
