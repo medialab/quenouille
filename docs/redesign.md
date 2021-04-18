@@ -9,3 +9,5 @@
 * throttling should allow new values to get buffered in hope of finding suitable one
 * handle exceptions from callable kwargs (throttle and group key)
 * `group` -> `key`?
+* threadsafe `can_do_job`
+* namedtuple job for maintenability
