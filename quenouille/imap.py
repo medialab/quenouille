@@ -356,6 +356,7 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
         Output generator function returned to provide an iterator to the
         user.
         """
+        boot()
 
         while True:
             error, result = output_queue.get(timeout=FOREVER)
@@ -387,9 +388,6 @@ def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFIN
 
     for thread in pool:
         thread.start()
-
-    next_tick = Thread(target=boot, daemon=True)
-    next_tick.start()
 
     return output()
 
