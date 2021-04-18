@@ -8,7 +8,7 @@ from queue import Queue, Full
 from threading import Thread, Event, Lock, Condition
 from collections import namedtuple, deque
 
-from quenouille.utils import get, put, clear, ThreadSafeIterator
+from quenouille.utils import get, put, clear, flush, ThreadSafeIterator
 from quenouille.constants import THE_END_IS_NIGH
 
 Result = namedtuple('Result', ['exception', 'job', 'value'])
@@ -29,7 +29,7 @@ class OrderedResultQueue(Queue):
         self.last_index = 0
         self.condition = Condition()
 
-    def put(self, result, timeout=None):
+    def put(self, result, *args, **kwargs):
         with self.condition:
             while self.last_index != result.job.index:
                 self.condition.wait()
@@ -37,7 +37,7 @@ class OrderedResultQueue(Queue):
             self.last_index += 1
             self.condition.notify_all()
 
-        return super().put(result, timeout=timeout)
+        return super().put(result, *args, **kwargs)
 
 
 class IterationState(object):
@@ -123,18 +123,13 @@ class LazyGroupedThreadPoolExecutor(object):
             # Clearing the job queue to cancel next jobs
             clear(self.job_queue)
 
+            # We flush the job queue with end messages
+            flush(self.job_queue, self.max_workers, THE_END_IS_NIGH)
+
             # Clearing the ouput queue since we won't be iterating anymore
             clear(self.output_queue)
 
-            for thread in self.threads:
-                try:
-                    self.job_queue.put_nowait(THE_END_IS_NIGH)
-
-                # If the job queue is full, we can safely stop because
-                # the teardown event will prevent subsequent queue get
-                except Full:
-                    break
-
+            # We wait for worker threads to end
             for thread in self.threads:
                 thread.join()
 
@@ -161,6 +156,7 @@ class LazyGroupedThreadPoolExecutor(object):
 
         def enqueue():
             while not self.teardown_event.is_set():
+                # print('attempt')
                 try:
                     item = next(iterator)
                 except StopIteration:
@@ -170,6 +166,7 @@ class LazyGroupedThreadPoolExecutor(object):
                 index = state.start_task()
 
                 job = Job(func, args=(item,), index=index)
+                # print('blocking before put')
                 put(self.job_queue, job)
 
         def output():

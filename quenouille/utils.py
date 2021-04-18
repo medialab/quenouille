@@ -5,7 +5,7 @@
 # Miscellaneous utility functions.
 #
 from threading import Lock, Event
-from queue import Empty
+from queue import Empty, Full
 
 from quenouille.constants import FOREVER
 
@@ -23,6 +23,14 @@ def clear(q):
         try:
             q.get_nowait()
         except Empty:
+            break
+
+
+def flush(q, n, msg):
+    for _ in range(n):
+        try:
+            q.put_nowait(msg)
+        except Full:
             break
 
 
