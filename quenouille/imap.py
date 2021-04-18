@@ -11,7 +11,7 @@ from collections import namedtuple, OrderedDict
 from itertools import count
 
 from quenouille.utils import get, put, clear, flush, ThreadSafeIterator
-from quenouille.constants import THE_END_IS_NIGH
+from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
 
 Result = namedtuple('Result', ['exc_info', 'job', 'value'])
 
@@ -27,6 +27,7 @@ Result = namedtuple('Result', ['exc_info', 'job', 'value'])
 # TODO: maybe the conditions in OrderedResultQueue and Buffer must be shuntable
 # TODO: there seems to be room for improvement regarding keyboardinterrupts etc. wrapping enqueue + __worker?
 # TODO: validate iterable, func, threads
+# TODO: transfer doctypes from imap_old
 
 
 class OrderedResultQueue(Queue):
@@ -88,7 +89,7 @@ class Job(object):
 
 
 class Buffer(object):
-    def __init__(self, maxsize=0, parallelism=None):
+    def __init__(self, maxsize=0, parallelism=1):
 
         # Properties
         self.maxsize = 0
@@ -103,7 +104,9 @@ class Buffer(object):
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
 
     def __can_work(self, job):
-        if self.parallelism is None:
+
+        # None group is the default and can always be processed without constraints
+        if job.group is None:
             return True
 
         count = self.worked_groups.get(job.group, 0)
@@ -180,15 +183,15 @@ def validate_max_workers(name, max_workers):
         raise TypeError('"%s" should be an integer > 0' % name)
 
 
-def validate_imap_kwargs(*, key, parallelism):
+def validate_imap_kwargs(*, key, parallelism, buffer_size):
     if key is not None and not callable(key):
         raise TypeError('"key" should be callable')
 
-    if parallelism is not None and not callable(key):
-        raise TypeError('"parallelism" requires a callable key')
-
-    if parallelism is not None and (not isinstance(parallelism, int) or parallelism < 1):
+    if not isinstance(parallelism, int) or parallelism < 1:
         raise TypeError('"parallelism" should be an integer > 0')
+
+    if not isinstance(buffer_size, int) or buffer_size < 0:
+        raise TypeError('"buffer_size" should be a positive integer')
 
 
 class LazyGroupedThreadPoolExecutor(object):
@@ -258,7 +261,8 @@ class LazyGroupedThreadPoolExecutor(object):
             self.job_queue.task_done()
             put(self.output_queue, result)
 
-    def __imap(self, iterable, func, *, ordered=False):
+    def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
+               buffer_size=DEFAULT_BUFFER_SIZE):
         iterator = ThreadSafeIterator(iterable)
         self.output_queue = Queue() if not ordered else OrderedResultQueue()
 
@@ -321,32 +325,66 @@ class LazyGroupedThreadPoolExecutor(object):
 
         return output()
 
-    def imap_unordered(self, iterable, func, *, key=None, parallelism=None):
-        validate_imap_kwargs(key=key, parallelism=parallelism)
-        return self.__imap(iterable, func, ordered=False)
+    def imap_unordered(self, iterable, func, *, key=None, parallelism=1,
+                       buffer_size=DEFAULT_BUFFER_SIZE):
 
-    def imap(self, iterable, func, *, key=None, parallelism=None):
-        validate_imap_kwargs(key=key, parallelism=parallelism)
-        return self.__imap(iterable, func, ordered=True)
+        validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
+
+        return self.__imap(
+            iterable,
+            func,
+            ordered=False,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size
+        )
+
+    def imap(self, iterable, func, *, key=None, parallelism=1,
+             buffer_size=DEFAULT_BUFFER_SIZE):
+
+        validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
+
+        return self.__imap(
+            iterable,
+            func,
+            ordered=True,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size
+        )
 
 
-def imap_unordered(iterable, func, threads, *, key=None, parallelism=None):
+def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
+                   buffer_size=DEFAULT_BUFFER_SIZE):
     validate_max_workers('threads', threads)
-    validate_imap_kwargs(key=key, parallelism=parallelism)
+    validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
 
     def generator():
         with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
-            yield from executor.imap_unordered(iterable, func)
+            yield from executor.imap_unordered(
+                iterable,
+                func,
+                key=key,
+                parallelism=parallelism,
+                buffer_size=buffer_size
+            )
 
     return generator()
 
 
-def imap(iterable, func, threads, *, key=None, parallelism=None):
+def imap(iterable, func, threads, *, key=None, parallelism=1,
+         buffer_size=DEFAULT_BUFFER_SIZE):
     validate_max_workers('threads', threads)
-    validate_imap_kwargs(key=key, parallelism=parallelism)
+    validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
 
     def generator():
         with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
-            yield from executor.imap(iterable, func)
+            yield from executor.imap(
+                iterable,
+                func,
+                key=key,
+                parallelism=parallelism,
+                buffer_size=buffer_size
+            )
 
     return generator()
