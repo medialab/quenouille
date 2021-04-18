@@ -21,6 +21,7 @@ Result = namedtuple('Result', ['exception', 'job', 'value'])
 # TODO: test with one thread
 # TODO: lazy thread init?
 # TODO: type checking in imap function also for convenience
+# TODO: still test the iterator to queue (reverse than the current queue to iterator, with blocking)
 
 
 class OrderedResultQueue(Queue):
@@ -141,6 +142,7 @@ class LazyGroupedThreadPoolExecutor(object):
 
             # Signaling we must tear down the worker thread
             if job is THE_END_IS_NIGH:
+                self.job_queue.task_done()
                 break
 
             result = job()
