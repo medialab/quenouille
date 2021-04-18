@@ -8,7 +8,7 @@ from queue import Queue, Full
 from threading import Thread, Event, Lock, Condition
 from collections import namedtuple, deque
 
-from quenouille.utils import get, put, ThreadSafeIterator
+from quenouille.utils import get, put, clear, ThreadSafeIterator
 from quenouille.constants import THE_END_IS_NIGH
 
 Result = namedtuple('Result', ['exception', 'job', 'value'])
@@ -20,6 +20,7 @@ Result = namedtuple('Result', ['exception', 'job', 'value'])
 # TODO: need a condition wait for the buffer later
 # TODO: test with one thread
 # TODO: lazy thread init?
+# TODO: type checking in imap function also for convenience
 
 
 class OrderedResultQueue(Queue):
@@ -84,10 +85,14 @@ class Job(object):
 
 class LazyGroupedThreadPoolExecutor(object):
     def __init__(self, max_workers):
+        if not isinstance(max_workers, int) or max_workers < 1:
+            raise TypeError('"max_workers/threads" should be a positive number')
+
         self.max_workers = max_workers
         self.job_queue = Queue(maxsize=max_workers)
         self.output_queue = None
         self.teardown_event = Event()
+        self.teardown_lock = Lock()
         self.closed = False
 
         self.threads = [
@@ -112,21 +117,28 @@ class LazyGroupedThreadPoolExecutor(object):
         if self.closed:
             return
 
-        self.teardown_event.set()
+        with self.teardown_lock:
+            self.teardown_event.set()
 
-        for thread in self.threads:
-            try:
-                self.job_queue.put_nowait(THE_END_IS_NIGH)
+            # Clearing the job queue to cancel next jobs
+            clear(self.job_queue)
 
-            # If the job queue is full, we can safely stop because
-            # the teardown event will prevent subsequent queue get
-            except Full:
-                break
+            # Clearing the ouput queue since we won't be iterating anymore
+            clear(self.output_queue)
 
-        for thread in self.threads:
-            thread.join()
+            for thread in self.threads:
+                try:
+                    self.job_queue.put_nowait(THE_END_IS_NIGH)
 
-        self.closed = True
+                # If the job queue is full, we can safely stop because
+                # the teardown event will prevent subsequent queue get
+                except Full:
+                    break
+
+            for thread in self.threads:
+                thread.join()
+
+            self.closed = True
 
     def __worker(self):
         while not self.teardown_event.is_set():
@@ -137,6 +149,7 @@ class LazyGroupedThreadPoolExecutor(object):
                 break
 
             result = job()
+            self.job_queue.task_done()
             put(self.output_queue, result)
 
     def __imap(self, iterable, func, *, ordered=False):
@@ -162,6 +175,7 @@ class LazyGroupedThreadPoolExecutor(object):
         def output():
             while not state.should_stop() and not self.teardown_event.is_set():
                 result = get(self.output_queue)
+                self.output_queue.task_done()
                 state.finish_task()
 
                 # NOTE: do we need a lock here?

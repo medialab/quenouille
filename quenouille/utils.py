@@ -5,6 +5,8 @@
 # Miscellaneous utility functions.
 #
 from threading import Lock, Event
+from queue import Empty
+
 from quenouille.constants import FOREVER
 
 
@@ -14,6 +16,14 @@ def get(q):
 
 def put(q, v):
     return q.put(v, timeout=FOREVER)
+
+
+def clear(q):
+    while True:
+        try:
+            q.get_nowait()
+        except Empty:
+            break
 
 
 class ThreadSafeIterator(object):
