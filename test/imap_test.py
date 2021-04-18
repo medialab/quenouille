@@ -60,21 +60,21 @@ class TestImap(object):
         assert len(results) == len(DATA)
         assert set(results) == set(DATA)
 
-    # def test_less_jobs_than_threads(self):
+    def test_less_jobs_than_threads(self):
 
-    #     results = list(imap_unordered(DATA[:2], sleeper, 2))
+        results = list(imap_unordered(DATA[:2], sleeper, 2))
 
-    #     assert set(results) == set([('A', 0.2, 1), ('A', 0.3, 0)])
+        assert set(results) == set([('A', 0.2, 1), ('A', 0.3, 0)])
 
-    # def test_one(self):
-    #     results = list(imap_unordered(DATA[:1], sleeper, 2))
+    def test_one(self):
+        results = list(imap_unordered(DATA[:1], sleeper, 2))
 
-    #     assert results == [('A', 0.3, 0)]
+        assert results == [('A', 0.3, 0)]
 
-    # def test_empty(self):
-    #     results = list(imap_unordered(iter([]), sleeper, 5))
+    def test_empty(self):
+        results = list(imap_unordered(iter([]), sleeper, 5))
 
-    #     assert results == []
+        assert results == []
 
     def test_ordered(self):
 

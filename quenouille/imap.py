@@ -18,6 +18,8 @@ Result = namedtuple('Result', ['exception', 'job', 'value'])
 # TODO: add unit test with blocking iterator
 # TODO: need an after job func callback to cleanup group counters + task counter (or just do it in output, since it is lock free)
 # TODO: need a condition wait for the buffer later
+# TODO: test with one thread
+# TODO: lazy thread init?
 
 
 class OrderedResultQueue(Queue):
