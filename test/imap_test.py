@@ -94,17 +94,6 @@ class TestImap(object):
 
     #     assert set(results) == set(DATA)
 
-    # def test_listener(self):
-    #     events = defaultdict(list)
-
-    #     listener = lambda event, job: events[event].append(job)
-
-    #     list(imap_unordered(DATA, sleeper, 5, listener=listener))
-
-    #     assert set(events.keys()) == {'start'}
-
-    #     assert set(events['start']) == set(DATA)
-
     def test_break(self):
 
         for i in imap(enumerate(DATA), enumerated_sleeper, 5):
