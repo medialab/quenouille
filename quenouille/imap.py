@@ -25,7 +25,8 @@ Result = namedtuple('Result', ['exc_info', 'job', 'value'])
 # TODO: type checking in imap function also for convenience
 # TODO: still test the iterator to queue (reverse than the current queue to iterator, with blocking)
 # TODO: maybe the conditions in OrderedResultQueue and Buffer must be shuntable
-# TODO: there seems to be room for improvement regarding keyboardinterrupts etc.
+# TODO: there seems to be room for improvement regarding keyboardinterrupts etc. wrapping enqueue + __worker?
+# TODO: validate iterable, func, threads
 
 
 class OrderedResultQueue(Queue):
@@ -174,10 +175,25 @@ class Buffer(object):
             self.condition.notify_all()
 
 
+def validate_max_workers(name, max_workers):
+    if not isinstance(max_workers, int) or max_workers < 1:
+        raise TypeError('"%s" should be an integer > 0' % name)
+
+
+def validate_imap_kwargs(*, key, parallelism):
+    if key is not None and not callable(key):
+        raise TypeError('"key" should be callable')
+
+    if parallelism is not None and not callable(key):
+        raise TypeError('"parallelism" requires a callable key')
+
+    if parallelism is not None and (not isinstance(parallelism, int) or parallelism < 1):
+        raise TypeError('"parallelism" should be an integer > 0')
+
+
 class LazyGroupedThreadPoolExecutor(object):
     def __init__(self, max_workers):
-        if not isinstance(max_workers, int) or max_workers < 1:
-            raise TypeError('"max_workers/threads" should be a positive number')
+        validate_max_workers('max_workers', max_workers)
 
         self.max_workers = max_workers
         self.job_queue = Queue(maxsize=max_workers)
@@ -268,6 +284,10 @@ class LazyGroupedThreadPoolExecutor(object):
 
                     job = Job(func, args=(item,), index=next(job_counter))
 
+                    if not buffer.can_work(job):
+                        buffer.put(job)
+                        continue
+
                 # Registering the job
                 state.start_task()
                 buffer.register_job(job)
@@ -301,18 +321,32 @@ class LazyGroupedThreadPoolExecutor(object):
 
         return output()
 
-    def imap_unordered(self, iterable, func):
+    def imap_unordered(self, iterable, func, *, key=None, parallelism=None):
+        validate_imap_kwargs(key=key, parallelism=parallelism)
         return self.__imap(iterable, func, ordered=False)
 
-    def imap(self, iterable, func):
+    def imap(self, iterable, func, *, key=None, parallelism=None):
+        validate_imap_kwargs(key=key, parallelism=parallelism)
         return self.__imap(iterable, func, ordered=True)
 
 
-def imap_unordered(iterable, func, threads):
-    with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
-        yield from executor.imap_unordered(iterable, func)
+def imap_unordered(iterable, func, threads, *, key=None, parallelism=None):
+    validate_max_workers('threads', threads)
+    validate_imap_kwargs(key=key, parallelism=parallelism)
+
+    def generator():
+        with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
+            yield from executor.imap_unordered(iterable, func)
+
+    return generator()
 
 
-def imap(iterable, func, threads):
-    with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
-        yield from executor.imap(iterable, func)
+def imap(iterable, func, threads, *, key=None, parallelism=None):
+    validate_max_workers('threads', threads)
+    validate_imap_kwargs(key=key, parallelism=parallelism)
+
+    def generator():
+        with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
+            yield from executor.imap(iterable, func)
+
+    return generator()
