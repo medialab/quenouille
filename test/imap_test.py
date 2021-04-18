@@ -6,7 +6,7 @@ import pytest
 import threading
 from collections import defaultdict
 from operator import itemgetter
-from quenouille import imap, imap_unordered
+from quenouille import imap_unordered
 
 DATA = [
     ('A', 0.3, 0),
@@ -33,7 +33,6 @@ def enumerated_sleeper(job):
 
 
 class TestImap(object):
-    pass
     # def test_arguments(self):
 
     #     with pytest.raises(TypeError):
@@ -54,12 +53,12 @@ class TestImap(object):
     #     with pytest.raises(TypeError):
     #         imap_unordered(DATA, sleeper, 3, group_throttle=-46)
 
-    # def test_basics(self):
+    def test_basics(self):
 
-    #     results = list(imap_unordered(DATA, sleeper, 2))
+        results = list(imap_unordered(DATA, sleeper, 2))
 
-    #     assert len(results) == len(DATA)
-    #     assert set(results) == set(DATA)
+        assert len(results) == len(DATA)
+        assert set(results) == set(DATA)
 
     # def test_less_jobs_than_threads(self):
 

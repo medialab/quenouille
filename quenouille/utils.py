@@ -8,6 +8,36 @@ from threading import Lock, Event
 from quenouille.constants import FOREVER
 
 
+def get(q):
+    return q.get(timeout=FOREVER)
+
+
+def put(q, v):
+    return q.put(v, timeout=FOREVER)
+
+
+class ThreadSafeIterator(object):
+    """
+    The ThreadSafeIterator class. Wraps the given iterator to make it
+    thread-safe.
+
+    Args:
+        iterable (iterable): target iterable to wrap
+
+    """
+
+    def __init__(self, iterable):
+        self.__iterator = iter(iterable)
+        self.lock = Lock()
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        with self.lock:
+            return next(self.__iterator)
+
+
 class QueueIterator(object):
     def __init__(self, queue):
         self.queue = queue
