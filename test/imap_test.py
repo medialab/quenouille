@@ -128,10 +128,16 @@ class TestImap(object):
         group = lambda x: 'SAME'
 
         nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.01))
-
         assert nbs == set(range(10))
-        # TODO: add a test with buffer_size 1 and 3
+
+        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=1))
+        assert nbs == set(range(10))
+
+        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=3))
+        assert nbs == set(range(10))
+
         # TODO: add ordered test with DATA (multiple groups)
+        # TODO: ftest
 
     # def test_function_throttle(self):
 
