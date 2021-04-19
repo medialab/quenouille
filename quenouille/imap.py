@@ -26,7 +26,6 @@ from quenouille.constants import (
 )
 
 # TODO: fully document this complex code...
-# TODO: test two executor successive imap calls
 # TODO: add unit test with blocking iterator
 # TODO: need an after job func callback to cleanup group counters + task counter (or just do it in output, since it is lock free)
 # TODO: need a condition wait for the buffer later
@@ -47,6 +46,7 @@ from quenouille.constants import (
 # TODO: None group is never throttled!
 # TODO: drop imap_old
 # TODO: type checking callable throttle?
+# TODO: what about parallelism > 1 and throttle > 0?
 
 
 class IterationState(object):
@@ -354,7 +354,7 @@ def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size, throttle
         raise TypeError('"throttle" cannot be negative')
 
 
-class LazyGroupedThreadPoolExecutor(object):
+class ThreadPoolExecutor(object):
     def __init__(self, max_workers):
         validate_max_workers('max_workers', max_workers)
 
@@ -500,6 +500,7 @@ class LazyGroupedThreadPoolExecutor(object):
             while not state.should_stop() and not self.teardown_event.is_set():
                 job = get(self.output_queue)
 
+                # Catching keyboard interrupts and other unrecoverable errors
                 if isinstance(job, BaseException):
                     raise job
 
@@ -594,7 +595,7 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
     )
 
     def generator():
-        with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
+        with ThreadPoolExecutor(max_workers=threads) as executor:
             yield from executor.imap_unordered(
                 iterable,
                 func,
@@ -620,7 +621,7 @@ def imap(iterable, func, threads, *, key=None, parallelism=1,
     )
 
     def generator():
-        with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
+        with ThreadPoolExecutor(max_workers=threads) as executor:
             yield from executor.imap(
                 iterable,
                 func,

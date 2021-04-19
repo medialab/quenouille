@@ -6,7 +6,7 @@ import pytest
 import threading
 from collections import defaultdict
 from operator import itemgetter
-from quenouille import imap_unordered, imap
+from quenouille import imap_unordered, imap, ThreadPoolExecutor
 
 DATA = [
     ('A', 0.3, 0),
@@ -179,3 +179,11 @@ class TestImap(object):
         with pytest.raises(RuntimeError):
             for i in imap(range(6, 15), hellraiser, 4):
                 pass
+
+    def test_executor(self):
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            result = list(executor.imap(DATA, sleeper))
+            assert result == DATA
+
+            result = set(executor.imap_unordered(DATA, sleeper))
+            assert result == set(DATA)
