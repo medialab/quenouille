@@ -30,14 +30,9 @@ from quenouille.constants import (
 # TODO: add unit test with blocking iterator
 # TODO: handle queues natively
 # TODO: transfer doctypes from imap_old
-# TODO: test buffer_size = 0
-# TODO: test with small buffer sizes
-# TODO: disclaimer about memory in the ordered case
-# TODO: using the same executor in different threads is not safe!
-# TODO: add notes related to throttle and parallelism > 1
-# TODO: raise an error when throttle and parallelism > 1?
+# TODO: doc disclaimer about memory in the ordered case
 # TODO: callable parallelism
-# TODO: None group is never throttled!
+# TODO: doc None group is never throttled!
 # TODO: drop imap_old
 # TODO: type checking callable throttle?
 # TODO: what about parallelism > 1 and throttle > 0?
