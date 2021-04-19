@@ -6,7 +6,7 @@
 #
 import sys
 from queue import Queue
-from threading import Thread, Event, Lock, Condition
+from threading import Thread, Timer, Event, Lock, Condition
 from collections import OrderedDict
 from itertools import count
 
@@ -98,7 +98,7 @@ class Buffer(object):
         # Containers
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
-        self.throttled_groups = set()
+        self.throttled_groups = {}
 
     def is_clean(self):
         with self.lock:
@@ -231,8 +231,31 @@ class Buffer(object):
             else:
                 self.worked_groups[group] -= 1
 
+            if job.throttling != 0:
+                assert group not in self.throttled_groups
+
+                # NOTE: this version will require one thread per group
+                # being throttled at a given time
+                # TODO: find a way consuming a single timer thread
+                timer = Timer(
+                    job.throttling,
+                    timer_callback,
+                    args=(group,)
+                )
+                self.throttled_groups[group] = timer
+                timer.start()
+
         with self.condition:
             self.condition.notify_all()
+
+    def timer_callback(self, group):
+        with self.lock:
+            assert group in self.throttled_groups
+            del self.throttled_groups[group]
+
+    def teardown(self):
+        for timer in self.throttled_groups.values():
+            timer.cancel()
 
 
 class OrderedOutputBuffer(object):
@@ -370,7 +393,7 @@ class LazyGroupedThreadPoolExecutor(object):
         ordered_output_buffer = OrderedOutputBuffer()
 
         # Teardown callbacks
-        # self.teardown_callbacks['test'] = lambda: print('test callback')
+        self.teardown_callbacks['buffer'] = buffer.teardown
 
         def enqueue():
             while not self.teardown_event.is_set():
