@@ -5,13 +5,24 @@
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
 import sys
+import time
 from queue import Queue
-from threading import Thread, Timer, Event, Lock, Condition
+from threading import Thread, Event, Lock, Condition
 from collections import OrderedDict
 from itertools import count
 
-from quenouille.utils import get, put, clear, flush, ThreadSafeIterator
-from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
+from quenouille.utils import (
+    get,
+    put,
+    clear,
+    flush,
+    ThreadSafeIterator,
+    SmartTimer
+)
+from quenouille.constants import (
+    THE_END_IS_NIGH,
+    DEFAULT_BUFFER_SIZE
+)
 
 # TODO: fully document this complex code...
 # TODO: test two executor successive imap calls
@@ -98,11 +109,16 @@ class Buffer(object):
         # Threading
         self.condition = Condition()
         self.lock = Lock()
+        self.throttle_timer = None
 
         # Containers
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
         self.throttled_groups = {}
+
+    def __len__(self):
+        with self.lock:
+            return len(self.items)
 
     def is_clean(self):
         with self.lock:
@@ -237,34 +253,64 @@ class Buffer(object):
             if job.throttling != 0:
                 assert group not in self.throttled_groups
 
-                # NOTE: this version will require one thread per group
-                # being throttled at a given time
-                # TODO: find a way consuming a single timer thread
-                # https://stackoverflow.com/questions/45867451/python-timer-remaining-time
-                timer = Timer(
-                    job.throttling,
-                    self.timer_callback,
-                    args=(group,)
-                )
-                self.throttled_groups[group] = timer
-                timer.start()
+                self.throttled_groups[group] = time.time() + job.throttling
+                self.__spawn_timer(job.throttling)
 
         with self.condition:
             self.condition.notify_all()
 
-    def timer_callback(self, group):
-        with self.lock:
-            assert group in self.throttled_groups
-            del self.throttled_groups[group]
+    def __spawn_timer(self, throttling):
+        if self.throttle_timer is not None:
+            if throttling < self.throttle_timer.remaining():
+                self.throttle_timer.cancel()
+            else:
+                return
 
+        timer = SmartTimer(
+            throttling,
+            self.timer_callback
+        )
+
+        self.throttle_timer = timer
+        timer.start()
+
+    def timer_callback(self):
+        with self.lock:
+            self.throttled_timer = None
+            assert len(self.throttled_groups) != 0
+
+            groups_to_release = []
+            earliest_next_time = None
+            current_time = time.time()
+
+            for group, release_time in self.throttled_groups.items():
+                if current_time >= release_time:
+                    groups_to_release.append(group)
+                else:
+                    if earliest_next_time is None or release_time < earliest_next_time:
+                        earliest_next_time = release_time
+            print(groups_to_release, earliest_next_time)
+            assert len(groups_to_release) > 0
+
+            # Actually releasing the groups
+            for group in groups_to_release:
+                del self.throttled_groups[group]
+
+            # Relaunching timer?
+            if earliest_next_time is not None:
+                throttling = earliest_next_time - current_time
+                self.__spawn_timer(throttling)
+
+        # Notifying waiters
         with self.condition:
             self.condition.notify_all()
 
     def teardown(self):
-        for timer in self.throttled_groups.values():
-            timer.cancel()
+        if self.throttle_timer is not None:
+            self.throttle_timer.cancel()
 
         self.throttled_groups = {}
+        self.throttle_timer = None
 
 
 class OrderedOutputBuffer(object):
