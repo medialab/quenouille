@@ -92,8 +92,7 @@ class QueueIterator(object):
     def __dec(self):
         self.working_threads -= 1
 
-        if self.working_threads < 0:
-            raise RuntimeError('Negative number of workers')
+        assert self.working_threads >= 0
 
         self.queue.task_done()
 

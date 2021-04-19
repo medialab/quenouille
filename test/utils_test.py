@@ -2,6 +2,7 @@
 # Quenouille Utils Unit Tests
 # =============================================================================
 import time
+import pytest
 from queue import Queue
 from collections import Counter
 
@@ -19,6 +20,9 @@ class TestUtils(object):
         assert not is_queue((i for i in range(4)))
 
     def test_iter_queue(self):
+        with pytest.raises(TypeError):
+            QueueIterator('test')
+
         q = Queue()
 
         q.put(2)
