@@ -13,4 +13,4 @@ FOREVER = threading.TIMEOUT_MAX
 THE_END_IS_NIGH = object()
 
 # Default buffer size for imap iterators
-DEFAULT_BUFFER_SIZE = 4096
+DEFAULT_BUFFER_SIZE = 1024

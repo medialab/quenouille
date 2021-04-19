@@ -103,6 +103,11 @@ class Buffer(object):
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
 
+    def __full(self):
+        count = len(self.items)
+        assert count <= self.maxsize
+        return count == self.maxsize
+
     def __can_work(self, job):
 
         # None group is the default and can always be processed without constraints
@@ -126,9 +131,7 @@ class Buffer(object):
         """
         self.lock.acquire()
 
-        assert len(self.items) <= self.maxsize, '%i - %i' % (len(self.items), self.maxsize)
-
-        if len(self.items) == self.maxsize:
+        if self.__full():
             self.lock.release()
 
             with self.condition:
@@ -142,8 +145,11 @@ class Buffer(object):
         self.lock.release()
 
     def get(self):
-        with self.lock:
+        while True:
+            self.lock.acquire()
+
             if len(self.items) == 0:
+                self.lock.release()
                 return None
 
             suitable_job = None
@@ -154,9 +160,24 @@ class Buffer(object):
                     break
 
             if suitable_job is not None:
-                return self.items.popitem(id(job))[1]
+                job = self.items.popitem(id(job))[1]
+                self.lock.release()
+                return job
+
+            self.lock.release()
+
+            if self.__full():
+
+                # TODO: with throttling, we might want to block until timer is free
+                with self.condition:
+                    self.condition.wait()
+
+                # Simulating recursion
+                continue
 
             return None
+
+        raise RuntimeError
 
     def register_job(self, job: Job):
         with self.lock:
@@ -302,9 +323,8 @@ class LazyGroupedThreadPoolExecutor(object):
                         group=group
                     )
 
-                    if not buffer.can_work(job):
-                        buffer.put(job)
-                        continue
+                    buffer.put(job)
+                    continue
 
                 # Registering the job
                 state.start_task()
