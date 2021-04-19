@@ -253,7 +253,7 @@ def validate_max_workers(name, max_workers):
         raise TypeError('"%s" should be an integer > 0' % name)
 
 
-def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size):
+def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size, throttle):
     if key is not None and not callable(key):
         raise TypeError('"key" should be callable')
 
@@ -265,6 +265,9 @@ def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size):
 
     if not isinstance(buffer_size, int) or buffer_size < 0:
         raise TypeError('"buffer_size" should be a positive integer')
+
+    if not isinstance(throttle, (int, float)) and not callable(throttle):
+        raise TypeError('"throttle" should be a number or callable')
 
 
 class LazyGroupedThreadPoolExecutor(object):
@@ -335,7 +338,7 @@ class LazyGroupedThreadPoolExecutor(object):
             put(self.output_queue, job)
 
     def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
-               buffer_size=DEFAULT_BUFFER_SIZE):
+               buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
         iterator = ThreadSafeIterator(iterable)
         self.output_queue = Queue()
 
@@ -419,13 +422,14 @@ class LazyGroupedThreadPoolExecutor(object):
         return output()
 
     def imap_unordered(self, iterable, func, *, key=None, parallelism=1,
-                       buffer_size=DEFAULT_BUFFER_SIZE):
+                       buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
         validate_imap_kwargs(
             max_workers=self.max_workers,
             key=key,
             parallelism=parallelism,
-            buffer_size=buffer_size
+            buffer_size=buffer_size,
+            throttle=throttle
         )
 
         return self.__imap(
@@ -434,17 +438,19 @@ class LazyGroupedThreadPoolExecutor(object):
             ordered=False,
             key=key,
             parallelism=parallelism,
-            buffer_size=buffer_size
+            buffer_size=buffer_size,
+            throttle=throttle
         )
 
     def imap(self, iterable, func, *, key=None, parallelism=1,
-             buffer_size=DEFAULT_BUFFER_SIZE):
+             buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
         validate_imap_kwargs(
             max_workers=self.max_workers,
             key=key,
             parallelism=parallelism,
-            buffer_size=buffer_size
+            buffer_size=buffer_size,
+            throttle=throttle
         )
 
         return self.__imap(
@@ -453,19 +459,21 @@ class LazyGroupedThreadPoolExecutor(object):
             ordered=True,
             key=key,
             parallelism=parallelism,
-            buffer_size=buffer_size
+            buffer_size=buffer_size,
+            throttle=throttle
         )
 
 
 def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
-                   buffer_size=DEFAULT_BUFFER_SIZE):
+                   buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
     validate_max_workers('threads', threads)
     validate_imap_kwargs(
         max_workers=threads,
         key=key,
         parallelism=parallelism,
-        buffer_size=buffer_size
+        buffer_size=buffer_size,
+        throttle=throttle
     )
 
     def generator():
@@ -475,21 +483,23 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
                 func,
                 key=key,
                 parallelism=parallelism,
-                buffer_size=buffer_size
+                buffer_size=buffer_size,
+                throttle=throttle
             )
 
     return generator()
 
 
 def imap(iterable, func, threads, *, key=None, parallelism=1,
-         buffer_size=DEFAULT_BUFFER_SIZE):
+         buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
     validate_max_workers('threads', threads)
     validate_imap_kwargs(
         max_workers=threads,
         key=key,
         parallelism=parallelism,
-        buffer_size=buffer_size
+        buffer_size=buffer_size,
+        throttle=throttle
     )
 
     def generator():
@@ -499,7 +509,8 @@ def imap(iterable, func, threads, *, key=None, parallelism=1,
                 func,
                 key=key,
                 parallelism=parallelism,
-                buffer_size=buffer_size
+                buffer_size=buffer_size,
+                throttle=throttle
             )
 
     return generator()
