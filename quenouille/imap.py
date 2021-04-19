@@ -496,6 +496,19 @@ class ThreadPoolExecutor(object):
             except BaseException as e:
                 smash(self.output_queue, e)
 
+        def cleanup():
+
+            # Cleanup buffer to remove dangling timers
+            del self.teardown_callbacks['buffer']
+            buffer.teardown()
+
+            # Sanity tests
+            assert buffer.is_clean()
+            assert ordered_output_buffer.is_clean()
+
+            # Making sure we are getting rid of the dispatcher thread
+            dispatcher.join()
+
         def output():
             while not state.should_stop() and not self.teardown_event.is_set():
                 job = get(self.output_queue)
@@ -519,16 +532,7 @@ class ThreadPoolExecutor(object):
                 else:
                     yield job.result
 
-            # Cleanup buffer to remove dangling timers
-            del self.teardown_callbacks['buffer']
-            buffer.teardown()
-
-            # Sanity tests
-            assert buffer.is_clean()
-            assert ordered_output_buffer.is_clean()
-
-            # Making sure we are getting rid of the dispatcher thread
-            dispatcher.join()
+            cleanup()
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
