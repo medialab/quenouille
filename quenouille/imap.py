@@ -210,7 +210,6 @@ class Buffer(object):
             if self.__full():
                 self.lock.release()
 
-                # TODO: with throttling, we might want to block until timer is free
                 with self.condition:
                     self.condition.wait()
 
