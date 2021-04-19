@@ -30,6 +30,9 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
 # TODO: test with small buffer sizes
 # TODO: disclaimer about memory in the ordered case
 # TODO: using the same executor in different threads is not safe!
+# TODO: add notes related to throttle and parallelism > 1
+# TODO: raise an error when throttle and parallelism > 1?
+# TODO: callable parallelism
 
 
 class IterationState(object):
@@ -237,9 +240,10 @@ class Buffer(object):
                 # NOTE: this version will require one thread per group
                 # being throttled at a given time
                 # TODO: find a way consuming a single timer thread
+                # https://stackoverflow.com/questions/45867451/python-timer-remaining-time
                 timer = Timer(
                     job.throttling,
-                    timer_callback,
+                    self.timer_callback,
                     args=(group,)
                 )
                 self.throttled_groups[group] = timer
@@ -259,6 +263,8 @@ class Buffer(object):
     def teardown(self):
         for timer in self.throttled_groups.values():
             timer.cancel()
+
+        self.throttled_groups = {}
 
 
 class OrderedOutputBuffer(object):
@@ -460,6 +466,9 @@ class LazyGroupedThreadPoolExecutor(object):
                     yield from ordered_output_buffer.output(job)
                 else:
                     yield job.result
+
+            # Cleanup buffer to remove dangling timers
+            buffer.teardown()
 
             # Sanity tests
             assert buffer.is_clean()
