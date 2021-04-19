@@ -56,7 +56,7 @@ class IterationState(object):
 
 
 class Job(object):
-    def __init__(self, func, args, kwargs={}, index=None, group=None):
+    def __init__(self, func, args, kwargs={}, index=None, group=None, throttling=0):
         self.func = func
         self.args = args
         self.kwargs = kwargs
@@ -64,6 +64,7 @@ class Job(object):
         self.group = group
         self.result = None
         self.exc_info = None
+        self.throttling = throttling
 
     def __call__(self):
         try:
@@ -72,12 +73,13 @@ class Job(object):
             self.exc_info = sys.exc_info()
 
     def __repr__(self):
-        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}>'.format(
+        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}{throttling}>'.format(
             name=self.__class__.__name__,
             index=self.index,
             group=self.group,
             args=self.args,
-            id=id(self)
+            id=id(self),
+            throttling=(' throttling={!r}'.format(self.throttling) if self.throttling else '')
         )
 
 
@@ -95,12 +97,14 @@ class Buffer(object):
         # Containers
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
+        self.times = {}
 
     def is_clean(self):
         with self.lock:
             return (
                 len(self.items) == 0 and
-                len(self.worked_groups) == 0
+                len(self.worked_groups) == 0 and
+                len(self.times) == 0
             )
 
     def __full(self):
@@ -269,6 +273,9 @@ def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size, throttle
     if not isinstance(throttle, (int, float)) and not callable(throttle):
         raise TypeError('"throttle" should be a number or callable')
 
+    if isinstance(throttle, (int, float)) and throttle < 0:
+        raise TypeError('"throttle" cannot be negative')
+
 
 class LazyGroupedThreadPoolExecutor(object):
     def __init__(self, max_workers):
@@ -371,11 +378,17 @@ class LazyGroupedThreadPoolExecutor(object):
                     if key is not None:
                         group = key(item)
 
+                    throttling = throttle
+
+                    if callable(throttle):
+                        throttling = throttle(group, item)
+
                     job = Job(
                         func,
                         args=(item,),
                         index=next(job_counter),
-                        group=group
+                        group=group,
+                        throttling=throttling
                     )
 
                     buffer.put(job)

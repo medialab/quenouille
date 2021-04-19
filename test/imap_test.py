@@ -49,6 +49,12 @@ class TestImap(object):
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 2, parallelism=4, key=itemgetter(0))
 
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 2, key=itemgetter(0), throttle='test')
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 2, key=itemgetter(0), throttle=-4)
+
     def test_basics(self):
 
         results = list(imap_unordered(DATA, sleeper, 2))
@@ -118,9 +124,10 @@ class TestImap(object):
 
     #     group = lambda x: 'SAME'
 
-    #     nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=0.1))
+    #     nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.1))
 
     #     assert nbs == set(range(10))
+    #     # TODO: add a test with buffer_size 1 and 3
 
     # def test_function_throttle(self):
 
