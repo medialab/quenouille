@@ -88,7 +88,7 @@ class Job(object):
 
 
 class Buffer(object):
-    def __init__(self, maxsize=0, parallelism=1):
+    def __init__(self, maxsize=1, parallelism=1):
 
         # Properties
         self.maxsize = maxsize
@@ -171,7 +171,6 @@ class Buffer(object):
 
             self.lock.acquire()
 
-        # TODO: for maxsize = 0, return the job instead of setting
         self.items[id(job)] = job
 
         self.lock.release()
@@ -304,8 +303,8 @@ def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size, throttle
     if parallelism > max_workers:
         raise TypeError('"parallelism" cannot be greater than the number of workers')
 
-    if not isinstance(buffer_size, int) or buffer_size < 0:
-        raise TypeError('"buffer_size" should be a positive integer')
+    if not isinstance(buffer_size, int) or buffer_size < 1:
+        raise TypeError('"buffer_size" should be an integer > 0')
 
     if not isinstance(throttle, (int, float)) and not callable(throttle):
         raise TypeError('"throttle" should be a number or callable')

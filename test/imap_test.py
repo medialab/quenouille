@@ -47,6 +47,9 @@ class TestImap(object):
             imap_unordered(DATA, sleeper, 4, parallelism=1, key=itemgetter(0), buffer_size='test')
 
         with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 4, parallelism=1, buffer_size=0)
+
+        with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 2, parallelism=4, key=itemgetter(0))
 
         with pytest.raises(TypeError):
