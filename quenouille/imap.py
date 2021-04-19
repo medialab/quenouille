@@ -47,6 +47,7 @@ from quenouille.constants import (
 # TODO: callable parallelism
 # TODO: None group is never throttled!
 # TODO: drop imap_old
+# TODO: type checking callable throttle?
 
 
 class IterationState(object):

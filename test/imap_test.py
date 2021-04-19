@@ -151,19 +151,19 @@ class TestImap(object):
         results = list(imap(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
         assert results == DATA
 
-    # def test_function_throttle(self):
+    def test_function_throttle(self):
 
-    #     def throttling(group, nb):
-    #         if group == 'odd':
-    #             return None
+        def throttling(group, nb):
+            if group == 'odd':
+                return 0
 
-    #         return 0.1
+            return 0.1
 
-    #     group = lambda x: 'even' if x % 2 == 0 else 'odd'
+        group = lambda x: 'even' if x % 2 == 0 else 'odd'
 
-    #     nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=throttling))
+        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=throttling))
 
-    #     assert nbs == set(range(10))
+        assert nbs == set(range(10))
 
     def test_raise(self):
         def hellraiser(i):
