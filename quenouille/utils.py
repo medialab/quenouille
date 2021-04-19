@@ -40,6 +40,17 @@ def smash(q, v):
     q.put_nowait(v)
 
 
+def is_queue(v):
+    return (
+        hasattr(v, 'get') and
+        callable(v.get) and
+        hasattr(v, 'put') and
+        callable(v.put) and
+        hasattr(v, 'task_done') and
+        callable(v.task_done)
+    )
+
+
 class ThreadSafeIterator(object):
     """
     The ThreadSafeIterator class. Wraps the given iterator to make it
@@ -64,6 +75,9 @@ class ThreadSafeIterator(object):
 
 class QueueIterator(object):
     def __init__(self, queue):
+        if not is_queue(queue):
+            raise TypeError('argument is not a queue')
+
         self.queue = queue
         self.lock = Lock()
         self.event = Event()

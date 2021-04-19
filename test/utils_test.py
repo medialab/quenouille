@@ -4,10 +4,20 @@
 import time
 from queue import Queue
 from collections import Counter
+
 from quenouille import QueueIterator
+from quenouille.utils import is_queue
 
 
 class TestUtils(object):
+    def test_is_queue(self):
+        assert is_queue(Queue())
+        assert not is_queue(True)
+        assert not is_queue(object())
+        assert not is_queue(dict())
+        assert not is_queue(list())
+        assert not is_queue((i for i in range(4)))
+
     def test_iter_queue(self):
         q = Queue()
 
