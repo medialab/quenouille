@@ -329,6 +329,20 @@ class OrderedOutputBuffer(object):
             self.items[job.index] = job
 
 
+class OutputContext(object):
+    def __init__(self, cleanup):
+        self.cleanup = cleanup
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, *args):
+        self.cleanup(normal_exit=exc_type is None)
+
+        if isinstance(exc_type, GeneratorExit):
+            return True
+
+
 def validate_max_workers(name, max_workers):
     if not isinstance(max_workers, int) or max_workers < 1:
         raise TypeError('"%s" should be an integer > 0' % name)
@@ -363,7 +377,6 @@ class ThreadPoolExecutor(object):
         self.output_queue = None
         self.teardown_event = Event()
         self.teardown_lock = Lock()
-        self.teardown_callbacks = {}
         self.closed = False
 
         self.threads = [
@@ -407,15 +420,7 @@ class ThreadPoolExecutor(object):
             for thread in self.threads:
                 thread.join()
 
-            # Clearing the job queue once more to unblock enqueuer
-            clear(self.job_queue)
-
             self.closed = True
-
-            for callback in self.teardown_callbacks.values():
-                callback()
-
-            self.teardown_callbacks = {}
 
     def __worker(self):
         try:
@@ -444,9 +449,6 @@ class ThreadPoolExecutor(object):
         state = IterationState()
         buffer = Buffer(self.output_queue, maxsize=buffer_size, parallelism=parallelism)
         ordered_output_buffer = OrderedOutputBuffer()
-
-        # Teardown callbacks
-        self.teardown_callbacks['buffer'] = buffer.teardown
 
         def enqueue():
             try:
@@ -496,43 +498,42 @@ class ThreadPoolExecutor(object):
             except BaseException as e:
                 smash(self.output_queue, e)
 
-        def cleanup():
+        def cleanup(normal_exit=True):
 
             # Cleanup buffer to remove dangling timers
-            del self.teardown_callbacks['buffer']
             buffer.teardown()
 
             # Sanity tests
-            assert buffer.is_clean()
-            assert ordered_output_buffer.is_clean()
+            if normal_exit:
+                assert buffer.is_clean()
+                assert ordered_output_buffer.is_clean()
 
             # Making sure we are getting rid of the dispatcher thread
             dispatcher.join()
 
         def output():
-            while not state.should_stop() and not self.teardown_event.is_set():
-                job = get(self.output_queue)
+            with OutputContext(cleanup):
+                while not state.should_stop() and not self.teardown_event.is_set():
+                    job = get(self.output_queue)
 
-                # Catching keyboard interrupts and other unrecoverable errors
-                if isinstance(job, BaseException):
-                    raise job
+                    # Catching keyboard interrupts and other unrecoverable errors
+                    if isinstance(job, BaseException):
+                        raise job
 
-                # Acknowledging this job was finished
-                self.output_queue.task_done()
-                buffer.unregister_job(job)
-                state.finish_task()
+                    # Acknowledging this job was finished
+                    self.output_queue.task_done()
+                    buffer.unregister_job(job)
+                    state.finish_task()
 
-                # Raising an error that occurred within worker function
-                if job.exc_info is not None:
-                    raise job.exc_info[1].with_traceback(job.exc_info[2])
+                    # Raising an error that occurred within worker function
+                    if job.exc_info is not None:
+                        raise job.exc_info[1].with_traceback(job.exc_info[2])
 
-                # Actually yielding the value to main thread
-                if ordered:
-                    yield from ordered_output_buffer.output(job)
-                else:
-                    yield job.result
-
-            cleanup()
+                    # Actually yielding the value to main thread
+                    if ordered:
+                        yield from ordered_output_buffer.output(job)
+                    else:
+                        yield job.result
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
