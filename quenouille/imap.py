@@ -35,8 +35,6 @@ from quenouille.constants import (
 # TODO: type checking in imap function also for convenience
 # TODO: still test the iterator to queue (reverse than the current queue to iterator, with blocking)
 # TODO: maybe the conditions in OrderedOutputQueue and Buffer must be shuntable
-# TODO: there seems to be room for improvement regarding keyboardinterrupts etc. wrapping enqueue + __worker? to test, raise KeyboardInterrupt
-# TODO: ^ also check the timer_callback and maybe put a large time.sleep in thread func to test SIGINT
 # TODO: validate iterable, func, threads
 # TODO: transfer doctypes from imap_old
 # TODO: test buffer_size = 0
@@ -451,48 +449,52 @@ class LazyGroupedThreadPoolExecutor(object):
         self.teardown_callbacks['buffer'] = buffer.teardown
 
         def enqueue():
-            while not self.teardown_event.is_set():
+            try:
+                while not self.teardown_event.is_set():
 
-                # First we check to see if there is a suitable buffered job
-                job = buffer.get()
+                    # First we check to see if there is a suitable buffered job
+                    job = buffer.get()
 
-                if job is None:
+                    if job is None:
 
-                    # Else we consume the iterator to find one
-                    try:
-                        item = next(iterator)
-                    except StopIteration:
-                        if not buffer.empty():
-                            continue
+                        # Else we consume the iterator to find one
+                        try:
+                            item = next(iterator)
+                        except StopIteration:
+                            if not buffer.empty():
+                                continue
 
-                        state.declare_end()
-                        break
+                            state.declare_end()
+                            break
 
-                    group = None
+                        group = None
 
-                    if key is not None:
-                        group = key(item)
+                        if key is not None:
+                            group = key(item)
 
-                    throttling = throttle
+                        throttling = throttle
 
-                    if callable(throttle):
-                        throttling = throttle(group, item)
+                        if callable(throttle):
+                            throttling = throttle(group, item)
 
-                    job = Job(
-                        func,
-                        args=(item,),
-                        index=next(job_counter),
-                        group=group,
-                        throttling=throttling
-                    )
+                        job = Job(
+                            func,
+                            args=(item,),
+                            index=next(job_counter),
+                            group=group,
+                            throttling=throttling
+                        )
 
-                    buffer.put(job)
-                    continue
+                        buffer.put(job)
+                        continue
 
-                # Registering the job
-                buffer.register_job(job)
-                state.start_task()
-                put(self.job_queue, job)
+                    # Registering the job
+                    buffer.register_job(job)
+                    state.start_task()
+                    put(self.job_queue, job)
+
+            except BaseException as e:
+                smash(self.output_queue, e)
 
         def output():
             while not state.should_stop() and not self.teardown_event.is_set():
