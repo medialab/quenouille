@@ -191,7 +191,7 @@ class Buffer(object):
             job = self.__find_suitable_job()
 
             if job is not None:
-                self.items.popitem(id(job))
+                del self.items[id(job)]
                 self.lock.release()
                 return job
 
