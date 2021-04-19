@@ -87,6 +87,15 @@ class Job(object):
         except BaseException as e:
             self.exc_info = sys.exc_info()
 
+    def __repr__(self):
+        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}>'.format(
+            name=self.__class__.__name__,
+            index=self.index,
+            group=self.group,
+            args=self.args,
+            id=id(self)
+        )
+
 
 class Buffer(object):
     def __init__(self, maxsize=0, parallelism=1):
@@ -103,10 +112,30 @@ class Buffer(object):
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
 
+    def is_clean(self):
+        with self.lock:
+            return (
+                len(self.items) == 0 and
+                len(self.worked_groups) == 0
+            )
+
     def __full(self):
         count = len(self.items)
         assert count <= self.maxsize
         return count == self.maxsize
+
+    def full(self):
+        with self.lock:
+            return self.__full()
+
+    def __empty(self):
+        count = len(self.items)
+        assert count <= self.maxsize
+        return count == 0
+
+    def empty(self):
+        with self.lock:
+            return self.__empty()
 
     def __can_work(self, job):
 
@@ -185,6 +214,10 @@ class Buffer(object):
         with self.lock:
             group = job.group
 
+            # None group does not count
+            if group is None:
+                return
+
             if group not in self.worked_groups:
                 self.worked_groups[group] = 1
             else:
@@ -193,6 +226,10 @@ class Buffer(object):
     def unregister_job(self, job: Job):
         with self.lock:
             group = job.group
+
+            # None group does not count
+            if group is None:
+                return
 
             assert group in self.worked_groups
 
@@ -310,6 +347,9 @@ class LazyGroupedThreadPoolExecutor(object):
                     try:
                         item = next(iterator)
                     except StopIteration:
+                        if not buffer.empty():
+                            continue
+
                         state.declare_end()
                         break
 
@@ -348,6 +388,9 @@ class LazyGroupedThreadPoolExecutor(object):
 
                 # Actually yielding the value to main thread
                 yield job.result
+
+            # Sanity tests
+            assert buffer.is_clean()
 
             # Making sure we are getting rid of the dispatcher thread
             dispatcher.join()

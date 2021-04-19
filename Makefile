@@ -18,7 +18,7 @@ clean:
 
 lint:
 	@echo Linting source code using pep8...
-	pycodestyle --ignore E501,E722,E731 $(SOURCE) test
+	pycodestyle --ignore E501,E722,E731,W504 $(SOURCE) test
 	@echo
 	@echo Searching for unused imports...
 	importchecker $(SOURCE) | grep -v __init__ || true
