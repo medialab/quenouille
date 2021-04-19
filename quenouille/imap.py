@@ -28,12 +28,10 @@ from quenouille.constants import (
 
 # TODO: fully document this complex code...
 # TODO: add unit test with blocking iterator
-# TODO: handle queues natively
-# TODO: transfer doctypes from imap_old
+# TODO: handle queues natively (process queue until drained, or closable queue?)
 # TODO: doc disclaimer about memory in the ordered case
 # TODO: callable parallelism
 # TODO: doc None group is never throttled!
-# TODO: drop imap_old
 # TODO: type checking callable throttle?
 # TODO: what about parallelism > 1 and throttle > 0?
 # TODO: args, kwargs callable from item
