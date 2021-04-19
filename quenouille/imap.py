@@ -47,6 +47,7 @@ from quenouille.constants import (
 # TODO: drop imap_old
 # TODO: type checking callable throttle?
 # TODO: what about parallelism > 1 and throttle > 0?
+# TODO: thread lock for imap methods + if closed
 
 
 class IterationState(object):
@@ -407,20 +408,28 @@ class ThreadPoolExecutor(object):
         with self.teardown_lock:
             self.teardown_event.set()
 
-            # Clearing the job queue to cancel next jobs
-            clear(self.job_queue)
-
-            # We flush the job queue with end messages
-            flush(self.job_queue, self.max_workers, THE_END_IS_NIGH)
+            # Killing workers (cancel jobs and flushing end messages)
+            self.__kill_workers()
 
             # Clearing the ouput queue since we won't be iterating anymore
-            clear(self.output_queue)
+            self.__clear_output_queue()
 
-            # We wait for worker threads to end
+            # Waiting for worker threads to end
             for thread in self.threads:
                 thread.join()
 
             self.closed = True
+
+    def __clear_output_queue(self):
+        if self.output_queue:
+            clear(self.output_queue)
+
+    def __cancel_all_jobs(self):
+        clear(self.job_queue)
+
+    def __kill_workers(self):
+        self.__cancel_all_jobs()
+        flush(self.job_queue, self.max_workers, THE_END_IS_NIGH)
 
     def __worker(self):
         try:
@@ -446,13 +455,14 @@ class ThreadPoolExecutor(object):
 
         # State
         job_counter = count()
+        end_event = Event()
         state = IterationState()
         buffer = Buffer(self.output_queue, maxsize=buffer_size, parallelism=parallelism)
         ordered_output_buffer = OrderedOutputBuffer()
 
         def enqueue():
             try:
-                while not self.teardown_event.is_set():
+                while not end_event.is_set():
 
                     # First we check to see if there is a suitable buffered job
                     job = buffer.get()
@@ -499,6 +509,13 @@ class ThreadPoolExecutor(object):
                 smash(self.output_queue, e)
 
         def cleanup(normal_exit=True):
+            end_event.set()
+
+            # Clearing the job queue to cancel next jobs
+            self.__cancel_all_jobs()
+
+            # Clearing the ouput queue since we won't be iterating anymore
+            self.__clear_output_queue()
 
             # Cleanup buffer to remove dangling timers
             buffer.teardown()
@@ -513,7 +530,7 @@ class ThreadPoolExecutor(object):
 
         def output():
             with OutputContext(cleanup):
-                while not state.should_stop() and not self.teardown_event.is_set():
+                while not state.should_stop() and not end_event.is_set():
                     job = get(self.output_queue)
 
                     # Catching keyboard interrupts and other unrecoverable errors
