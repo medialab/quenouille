@@ -16,6 +16,7 @@ from quenouille.utils import (
     put,
     clear,
     flush,
+    smash,
     ThreadSafeIterator,
     SmartTimer
 )
@@ -103,9 +104,10 @@ class Job(object):
 
 
 class Buffer(object):
-    def __init__(self, maxsize=1, parallelism=1):
+    def __init__(self, output_queue, maxsize=1, parallelism=1):
 
         # Properties
+        self.output_queue = output_queue
         self.maxsize = maxsize
         self.parallelism = parallelism
 
@@ -265,35 +267,39 @@ class Buffer(object):
         timer.start()
 
     def timer_callback(self):
-        with self.lock:
-            self.throttle_timer = None
-            assert len(self.throttled_groups) != 0
+        try:
+            with self.lock:
+                self.throttle_timer = None
+                assert len(self.throttled_groups) != 0
 
-            groups_to_release = []
-            earliest_next_time = None
-            current_time = time.time()
+                groups_to_release = []
+                earliest_next_time = None
+                current_time = time.time()
 
-            for group, release_time in self.throttled_groups.items():
-                if current_time >= release_time:
-                    groups_to_release.append(group)
-                else:
-                    if earliest_next_time is None or release_time < earliest_next_time:
-                        earliest_next_time = release_time
+                for group, release_time in self.throttled_groups.items():
+                    if current_time >= release_time:
+                        groups_to_release.append(group)
+                    else:
+                        if earliest_next_time is None or release_time < earliest_next_time:
+                            earliest_next_time = release_time
 
-            assert len(groups_to_release) > 0
+                assert len(groups_to_release) > 0
 
-            # Actually releasing the groups
-            for group in groups_to_release:
-                del self.throttled_groups[group]
+                # Actually releasing the groups
+                for group in groups_to_release:
+                    del self.throttled_groups[group]
 
-            # Relaunching timer?
-            if earliest_next_time is not None:
-                throttling = earliest_next_time - current_time
-                self.__spawn_timer(throttling)
+                # Relaunching timer?
+                if earliest_next_time is not None:
+                    throttling = earliest_next_time - current_time
+                    self.__spawn_timer(throttling)
 
-        # Notifying waiters
-        with self.condition:
-            self.condition.notify_all()
+            # Notifying waiters
+            with self.condition:
+                self.condition.notify_all()
+
+        except BaseException as e:
+            smash(self.output_queue, e)
 
     def teardown(self):
         if self.throttle_timer is not None:
@@ -428,7 +434,7 @@ class LazyGroupedThreadPoolExecutor(object):
                 put(self.output_queue, job)
 
         except BaseException as e:
-            put(self.output_queue, e)
+            smash(self.output_queue, e)
 
     def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
                buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
@@ -438,7 +444,7 @@ class LazyGroupedThreadPoolExecutor(object):
         # State
         job_counter = count()
         state = IterationState()
-        buffer = Buffer(maxsize=buffer_size, parallelism=parallelism)
+        buffer = Buffer(self.output_queue, maxsize=buffer_size, parallelism=parallelism)
         ordered_output_buffer = OrderedOutputBuffer()
 
         # Teardown callbacks

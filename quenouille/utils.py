@@ -35,6 +35,11 @@ def flush(q, n, msg):
             break
 
 
+def smash(q, v):
+    clear(q)
+    q.put_nowait(v)
+
+
 class ThreadSafeIterator(object):
     """
     The ThreadSafeIterator class. Wraps the given iterator to make it
