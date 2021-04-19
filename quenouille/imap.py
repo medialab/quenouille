@@ -253,12 +253,15 @@ def validate_max_workers(name, max_workers):
         raise TypeError('"%s" should be an integer > 0' % name)
 
 
-def validate_imap_kwargs(*, key, parallelism, buffer_size):
+def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size):
     if key is not None and not callable(key):
         raise TypeError('"key" should be callable')
 
     if not isinstance(parallelism, int) or parallelism < 1:
         raise TypeError('"parallelism" should be an integer > 0')
+
+    if parallelism > max_workers:
+        raise TypeError('"parallelism" cannot be greater than the number of workers')
 
     if not isinstance(buffer_size, int) or buffer_size < 0:
         raise TypeError('"buffer_size" should be a positive integer')
@@ -418,7 +421,12 @@ class LazyGroupedThreadPoolExecutor(object):
     def imap_unordered(self, iterable, func, *, key=None, parallelism=1,
                        buffer_size=DEFAULT_BUFFER_SIZE):
 
-        validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
+        validate_imap_kwargs(
+            max_workers=self.max_workers,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size
+        )
 
         return self.__imap(
             iterable,
@@ -432,7 +440,12 @@ class LazyGroupedThreadPoolExecutor(object):
     def imap(self, iterable, func, *, key=None, parallelism=1,
              buffer_size=DEFAULT_BUFFER_SIZE):
 
-        validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
+        validate_imap_kwargs(
+            max_workers=self.max_workers,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size
+        )
 
         return self.__imap(
             iterable,
@@ -446,8 +459,14 @@ class LazyGroupedThreadPoolExecutor(object):
 
 def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
                    buffer_size=DEFAULT_BUFFER_SIZE):
+
     validate_max_workers('threads', threads)
-    validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
+    validate_imap_kwargs(
+        max_workers=threads,
+        key=key,
+        parallelism=parallelism,
+        buffer_size=buffer_size
+    )
 
     def generator():
         with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
@@ -464,8 +483,14 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
 
 def imap(iterable, func, threads, *, key=None, parallelism=1,
          buffer_size=DEFAULT_BUFFER_SIZE):
+
     validate_max_workers('threads', threads)
-    validate_imap_kwargs(key=key, parallelism=parallelism, buffer_size=buffer_size)
+    validate_imap_kwargs(
+        max_workers=threads,
+        key=key,
+        parallelism=parallelism,
+        buffer_size=buffer_size
+    )
 
     def generator():
         with LazyGroupedThreadPoolExecutor(max_workers=threads) as executor:
