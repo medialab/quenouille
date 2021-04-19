@@ -253,6 +253,9 @@ class Buffer(object):
             assert group in self.throttled_groups
             del self.throttled_groups[group]
 
+        with self.condition:
+            self.condition.notify_all()
+
     def teardown(self):
         for timer in self.throttled_groups.values():
             timer.cancel()
