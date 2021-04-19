@@ -414,17 +414,21 @@ class LazyGroupedThreadPoolExecutor(object):
             self.teardown_callbacks = {}
 
     def __worker(self):
-        while not self.teardown_event.is_set():
-            job = get(self.job_queue)
+        try:
+            while not self.teardown_event.is_set():
+                job = get(self.job_queue)
 
-            # Signaling we must tear down the worker thread
-            if job is THE_END_IS_NIGH:
+                # Signaling we must tear down the worker thread
+                if job is THE_END_IS_NIGH:
+                    self.job_queue.task_done()
+                    break
+
+                job()
                 self.job_queue.task_done()
-                break
+                put(self.output_queue, job)
 
-            job()
-            self.job_queue.task_done()
-            put(self.output_queue, job)
+        except BaseException as e:
+            put(self.output_queue, e)
 
     def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
                buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
@@ -487,6 +491,9 @@ class LazyGroupedThreadPoolExecutor(object):
         def output():
             while not state.should_stop() and not self.teardown_event.is_set():
                 job = get(self.output_queue)
+
+                if isinstance(job, BaseException):
+                    raise job
 
                 # Acknowledging this job was finished
                 self.output_queue.task_done()
