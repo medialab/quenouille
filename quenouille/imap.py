@@ -517,6 +517,7 @@ class LazyGroupedThreadPoolExecutor(object):
                     yield job.result
 
             # Cleanup buffer to remove dangling timers
+            del self.teardown_callbacks['buffer']
             buffer.teardown()
 
             # Sanity tests
