@@ -175,22 +175,10 @@ class Buffer(object):
         return None
 
     def put(self, job: Job):
-        """
-        Add a value to the buffer and blocks if the buffer is already full.
-        """
-        self.lock.acquire()
+        with self.lock:
+            assert not self.__full()
 
-        if self.__full():
-            self.lock.release()
-
-            with self.condition:
-                self.condition.wait()
-
-            self.lock.acquire()
-
-        self.items[id(job)] = job
-
-        self.lock.release()
+            self.items[id(job)] = job
 
     def get(self):
         while True:
