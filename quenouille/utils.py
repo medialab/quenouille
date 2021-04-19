@@ -5,7 +5,7 @@
 # Miscellaneous utility functions.
 #
 import time
-from threading import Lock, Event, Timer
+from threading import Lock, Condition, Timer
 from queue import Empty, Full
 
 from quenouille.constants import FOREVER
@@ -80,27 +80,31 @@ class QueueIterator(object):
 
         self.queue = queue
         self.lock = Lock()
-        self.event = Event()
+        self.condition = Condition()
         self.working_threads = 0
 
-    def inc(self):
-        with self.lock:
-            self.working_threads += 1
-            self.event.set()
+    def __inc(self):
+        self.working_threads += 1
 
-    def dec(self):
-        with self.lock:
-            self.working_threads -= 1
+        with self.condition:
+            self.condition.notify_all()
 
-            if self.working_threads < 0:
-                raise RuntimeError('Negative number of workers')
+    def __dec(self):
+        self.working_threads -= 1
 
-            self.event.set()
+        if self.working_threads < 0:
+            raise RuntimeError('Negative number of workers')
+
+        self.queue.task_done()
+
+        with self.condition:
+            self.condition.notify_all()
 
     def task_done(self):
-        return self.dec()
+        with self.lock:
+            return self.__dec()
 
-    def threads_still_working(self):
+    def __threads_still_working(self):
         return self.working_threads != 0
 
     def __iter__(self):
@@ -112,18 +116,20 @@ class QueueIterator(object):
             with self.lock:
 
                 # If queue is empty and all threads finished we stop
-                if self.queue.qsize() == 0 and not self.threads_still_working():
+                if self.queue.empty() and not self.__threads_still_working():
                     raise StopIteration
 
             # The queue is empty but some threads are still working, we need to wait
-            if self.queue.qsize() == 0:
-                self.event.clear()
-                self.event.wait()
+            if self.queue.empty():
+
+                with self.condition:
+                    self.condition.wait()
+
                 continue
 
-            item = self.queue.get(timeout=FOREVER)
-
-            self.inc()
+            with self.lock:
+                item = get(self.queue)
+                self.__inc()
 
             return item
 
@@ -131,7 +137,7 @@ class QueueIterator(object):
         pass
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.dec()
+        self.task_done()
 
 
 class SmartTimer(Timer):
