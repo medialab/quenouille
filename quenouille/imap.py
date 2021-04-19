@@ -307,6 +307,9 @@ class LazyGroupedThreadPoolExecutor(object):
             thread.start()
 
     def __enter__(self):
+        if self.closed:
+            raise RuntimeError('cannot re-enter a closed executor')
+
         return self
 
     def __exit__(self, *args):
@@ -339,6 +342,8 @@ class LazyGroupedThreadPoolExecutor(object):
 
             for callback in self.teardown_callbacks.values():
                 callback()
+
+            self.teardown_callbacks = {}
 
     def __worker(self):
         while not self.teardown_event.is_set():
