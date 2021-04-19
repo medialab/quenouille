@@ -91,17 +91,14 @@ class TestImap(object):
         assert set(results) == set(DATA)
 
         # Ordered
-        # results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0)))
-
-        # assert set(results) == set(DATA)
+        # results = list(imap(DATA, sleeper, 2, parallelism=1, key=itemgetter(0)))
+        # assert results == DATA
 
         # results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3))
-
-        # assert set(results) == set(DATA)
+        # assert results == DATA
 
         # results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
-
-        # assert set(results) == set(DATA)
+        # assert results == DATA
 
     def test_break(self):
 
