@@ -27,7 +27,6 @@ from quenouille.constants import (
 )
 
 # TODO: fully document this complex code...
-# TODO: add unit test with blocking iterator
 # TODO: handle queues natively (process queue until drained, or closable queue?)
 # TODO: doc disclaimer about memory in the ordered case
 # TODO: callable parallelism
@@ -35,30 +34,7 @@ from quenouille.constants import (
 # TODO: type checking callable throttle?
 # TODO: what about parallelism > 1 and throttle > 0?
 # TODO: args, kwargs callable from item
-
-
-class IterationState(object):
-    def __init__(self):
-        self.lock = Lock()
-        self.started_count = 0
-        self.finished_count = 0
-        self.finished = False
-
-    def start_task(self):
-        with self.lock:
-            self.started_count += 1
-
-    def finish_task(self):
-        with self.lock:
-            self.finished_count += 1
-
-    def declare_end(self):
-        with self.lock:
-            self.finished = True
-
-    def should_stop(self):
-        with self.lock:
-            return self.finished and self.finished_count == self.started_count
+# TODO: base exec catch should capture trace and smash a result (maybe drop try in job execution then)
 
 
 class Job(object):
@@ -86,6 +62,42 @@ class Job(object):
             args=self.args,
             id=id(self),
             throttling=(' throttling={!r}'.format(self.throttling) if self.throttling else '')
+        )
+
+
+class IterationState(object):
+    def __init__(self):
+        self.lock = Lock()
+        self.started_count = 0
+        self.finished_count = 0
+        self.finished = False
+
+    def start_task(self):
+        with self.lock:
+            self.started_count += 1
+
+    def finish_task(self):
+        with self.lock:
+            self.finished_count += 1
+
+    def declare_end(self):
+        with self.lock:
+            self.finished = True
+            return self.__should_stop()
+
+    def __should_stop(self):
+        return self.finished and self.finished_count == self.started_count
+
+    def should_stop(self):
+        with self.lock:
+            return self.__should_stop()
+
+    def __repr__(self):
+        return '<{name}{finished} started={started!r} done={done!r}>'.format(
+            name=self.__class__.__name__,
+            finished=(' finished' if self.finished else ''),
+            started=self.started_count,
+            done=self.finished_count
         )
 
 
@@ -483,7 +495,13 @@ class ThreadPoolExecutor(object):
                             if not buffer.empty():
                                 continue
 
-                            state.declare_end()
+                            should_stop = state.declare_end()
+
+                            # Sometimes the end of the iterator lags behind
+                            # the output generator
+                            if should_stop:
+                                self.output_queue.put_nowait(THE_END_IS_NIGH)
+
                             break
 
                         group = None
@@ -541,6 +559,9 @@ class ThreadPoolExecutor(object):
             with OutputContext(cleanup):
                 while not state.should_stop() and not end_event.is_set():
                     job = get(self.output_queue)
+
+                    if job is THE_END_IS_NIGH:
+                        break
 
                     # Catching keyboard interrupts and other unrecoverable errors
                     if isinstance(job, BaseException):

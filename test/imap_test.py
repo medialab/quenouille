@@ -6,6 +6,7 @@ import pytest
 import threading
 from collections import defaultdict
 from operator import itemgetter
+
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
 
 DATA = [
@@ -211,3 +212,29 @@ class TestImap(object):
 
             result = set(executor.imap_unordered(DATA, sleeper))
             assert result == set(DATA)
+
+    def test_blocking_iterator(self):
+        def sleeping():
+            for i in range(5):
+                yield i
+                time.sleep(0.01)
+
+        def blocking():
+            condition = threading.Condition()
+
+            def release():
+                with condition:
+                    condition.notify_all()
+
+            for i in range(5):
+                yield i
+                timer = threading.Timer(0.01, release)
+                timer.start()
+                with condition:
+                    condition.wait()
+
+        result = list(imap(sleeping(), lambda x: x, 4))
+        assert result == list(range(5))
+
+        result = list(imap(blocking(), lambda x: x, 4))
+        assert result == list(range(5))
