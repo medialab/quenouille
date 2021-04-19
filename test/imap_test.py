@@ -128,6 +128,7 @@ class TestImap(object):
 
         assert nbs == set(range(10))
         # TODO: add a test with buffer_size 1 and 3
+        # TODO: add ordered test with DATA
 
     # def test_function_throttle(self):
 
