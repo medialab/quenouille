@@ -35,6 +35,12 @@ def enumerated_sleeper(job):
 class TestImap(object):
     def test_arguments(self):
         with pytest.raises(TypeError):
+            imap_unordered(None, sleeper, 4)
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, 'test', 4)
+
+        with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 'test')
 
         with pytest.raises(TypeError):

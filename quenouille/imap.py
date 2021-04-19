@@ -9,6 +9,7 @@ import time
 from queue import Queue
 from threading import Thread, Event, Lock, Condition
 from collections import OrderedDict
+from collections.abc import Iterable
 from itertools import count
 
 from quenouille.utils import (
@@ -27,11 +28,7 @@ from quenouille.constants import (
 
 # TODO: fully document this complex code...
 # TODO: add unit test with blocking iterator
-# TODO: lazy thread init?
-# TODO: type checking in imap function also for convenience
-# TODO: still test the iterator to queue (reverse than the current queue to iterator, with blocking)
-# TODO: maybe the conditions in OrderedOutputQueue and Buffer must be shuntable
-# TODO: validate iterable, func, threads
+# TODO: handle queues natively
 # TODO: transfer doctypes from imap_old
 # TODO: test buffer_size = 0
 # TODO: test with small buffer sizes
@@ -346,21 +343,29 @@ def validate_max_workers(name, max_workers):
         raise TypeError('"%s" should be an integer > 0' % name)
 
 
-def validate_imap_kwargs(*, max_workers, key, parallelism, buffer_size, throttle):
+def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffer_size,
+                         throttle):
+
+    if not isinstance(iterable, Iterable):
+        raise TypeError('target is not iterable')
+
+    if not callable(func):
+        raise TypeError('worker function is not callable')
+
     if key is not None and not callable(key):
-        raise TypeError('"key" should be callable')
+        raise TypeError('"key" is not callable')
 
     if not isinstance(parallelism, int) or parallelism < 1:
-        raise TypeError('"parallelism" should be an integer > 0')
+        raise TypeError('"parallelism" is not an integer > 0')
 
     if parallelism > max_workers:
         raise TypeError('"parallelism" cannot be greater than the number of workers')
 
     if not isinstance(buffer_size, int) or buffer_size < 1:
-        raise TypeError('"buffer_size" should be an integer > 0')
+        raise TypeError('"buffer_size" is not an integer > 0')
 
     if not isinstance(throttle, (int, float)) and not callable(throttle):
-        raise TypeError('"throttle" should be a number or callable')
+        raise TypeError('"throttle" is not a number or callable')
 
     if isinstance(throttle, (int, float)) and throttle < 0:
         raise TypeError('"throttle" cannot be negative')
@@ -576,6 +581,8 @@ class ThreadPoolExecutor(object):
                        buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
         validate_imap_kwargs(
+            iterable=iterable,
+            func=func,
             max_workers=self.max_workers,
             key=key,
             parallelism=parallelism,
@@ -597,6 +604,8 @@ class ThreadPoolExecutor(object):
              buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
         validate_imap_kwargs(
+            iterable=iterable,
+            func=func,
             max_workers=self.max_workers,
             key=key,
             parallelism=parallelism,
@@ -620,6 +629,8 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
 
     validate_max_workers('threads', threads)
     validate_imap_kwargs(
+        iterable=iterable,
+        func=func,
         max_workers=threads,
         key=key,
         parallelism=parallelism,
@@ -646,6 +657,8 @@ def imap(iterable, func, threads, *, key=None, parallelism=1,
 
     validate_max_workers('threads', threads)
     validate_imap_kwargs(
+        iterable=iterable,
+        func=func,
         max_workers=threads,
         key=key,
         parallelism=parallelism,
