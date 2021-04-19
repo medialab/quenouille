@@ -127,17 +127,29 @@ class TestImap(object):
 
         group = lambda x: 'SAME'
 
-        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.01))
+        nbs = set(imap_unordered(range(10), lambda x: x, 10, key=group, throttle=0.01))
         assert nbs == set(range(10))
 
-        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=1))
+        nbs = set(imap_unordered(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=1))
         assert nbs == set(range(10))
 
-        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=3))
+        nbs = set(imap_unordered(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=3))
         assert nbs == set(range(10))
 
-        # TODO: add ordered test with DATA (multiple groups)
-        # TODO: ftest
+        nbs = list(imap(range(10), lambda x: x, 10, key=group, throttle=0.01))
+        assert nbs == list(range(10))
+
+        nbs = list(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=1))
+        assert nbs == list(range(10))
+
+        nbs = list(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=3))
+        assert nbs == list(range(10))
+
+        results = list(imap_unordered(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
+        assert set(results) == set(DATA)
+
+        results = list(imap(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
+        assert results == DATA
 
     # def test_function_throttle(self):
 
