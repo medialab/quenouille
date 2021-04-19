@@ -4,7 +4,8 @@
 #
 # Miscellaneous utility functions.
 #
-from threading import Lock, Event
+import time
+from threading import Lock, Event, Timer
 from queue import Empty, Full
 
 from quenouille.constants import FOREVER
@@ -112,3 +113,18 @@ class QueueIterator(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.dec()
+
+
+class SmartTimer(Timer):
+    """
+    A Timer subclass able to return information about its execution time.
+    """
+    def __init__(self, *args, **kwargs):
+        self.started_time = time.time()
+        super().__init__(*args, **kwargs)
+
+    def elapsed(self):
+        return time.time() - self.started_time
+
+    def remaining(self):
+        return self.interval - self.elapsed()
