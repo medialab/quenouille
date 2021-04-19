@@ -263,7 +263,7 @@ class Buffer(object):
 
     def timer_callback(self):
         with self.lock:
-            self.throttled_timer = None
+            self.throttle_timer = None
             assert len(self.throttled_groups) != 0
 
             groups_to_release = []
@@ -276,7 +276,7 @@ class Buffer(object):
                 else:
                     if earliest_next_time is None or release_time < earliest_next_time:
                         earliest_next_time = release_time
-            print(groups_to_release, earliest_next_time)
+
             assert len(groups_to_release) > 0
 
             # Actually releasing the groups
