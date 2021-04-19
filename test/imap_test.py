@@ -58,6 +58,19 @@ class TestImap(object):
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 2, key=itemgetter(0), throttle=-4)
 
+        with pytest.raises(RuntimeError):
+            with ThreadPoolExecutor(4) as executor:
+                pass
+
+            executor.imap(DATA, sleeper)
+
+        with pytest.raises(RuntimeError):
+            with ThreadPoolExecutor(4) as executor:
+                def work(item):
+                    executor.imap_unordered(DATA, sleeper)
+
+                list(executor.imap(DATA, work))
+
     def test_basics(self):
 
         results = list(imap_unordered(DATA, sleeper, 2))

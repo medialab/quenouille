@@ -44,7 +44,7 @@ from quenouille.constants import (
 # TODO: drop imap_old
 # TODO: type checking callable throttle?
 # TODO: what about parallelism > 1 and throttle > 0?
-# TODO: thread lock for imap methods + if closed
+# TODO: args, kwargs callable from item
 
 
 class IterationState(object):
@@ -375,6 +375,7 @@ class ThreadPoolExecutor(object):
         self.output_queue = None
         self.teardown_event = Event()
         self.teardown_lock = Lock()
+        self.imap_lock = Lock()
         self.closed = False
 
         self.threads = [
@@ -447,6 +448,17 @@ class ThreadPoolExecutor(object):
 
     def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
                buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+
+        # Cannot run in multiple threads
+        if self.imap_lock.locked():
+            raise RuntimeError('cannot run multiple executor methods concurrently from different threads')
+
+        # Cannot run if already closed
+        if self.closed:
+            raise RuntimeError('cannot use thread pool after teardown')
+
+        self.imap_lock.acquire()
+
         iterator = ThreadSafeIterator(iterable)
         self.output_queue = Queue()
 
@@ -524,6 +536,8 @@ class ThreadPoolExecutor(object):
 
             # Making sure we are getting rid of the dispatcher thread
             dispatcher.join()
+
+            self.imap_lock.release()
 
         def output():
             with OutputContext(cleanup):
