@@ -28,23 +28,7 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
 # TODO: transfer doctypes from imap_old
 # TODO: test buffer_size = 0
 # TODO: test with small buffer sizes
-
-
-class OrderedOutputQueue(Queue):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.last_index = 0
-        self.condition = Condition()
-
-    def put(self, job, *args, **kwargs):
-        with self.condition:
-            while self.last_index != job.index:
-                self.condition.wait()
-
-            self.last_index += 1
-            self.condition.notify_all()
-
-        return super().put(job, *args, **kwargs)
+# TODO: disclaimer about memory in the ordered case
 
 
 class IterationState(object):
@@ -242,6 +226,28 @@ class Buffer(object):
             self.condition.notify_all()
 
 
+class OrderedOutputBuffer(object):
+    def __init__(self):
+        self.last_index = 0
+        self.items = {}
+
+    def is_clean(self):
+        return len(self.items) == 0
+
+    def flush(self):
+        while self.last_index in self.items:
+            yield self.items.pop(self.last_index).result
+            self.last_index += 1
+
+    def output(self, job):
+        if job.index == self.last_index:
+            self.last_index += 1
+            yield job.result
+            yield from self.flush()
+        else:
+            self.items[job.index] = job
+
+
 def validate_max_workers(name, max_workers):
     if not isinstance(max_workers, int) or max_workers < 1:
         raise TypeError('"%s" should be an integer > 0' % name)
@@ -328,12 +334,13 @@ class LazyGroupedThreadPoolExecutor(object):
     def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
                buffer_size=DEFAULT_BUFFER_SIZE):
         iterator = ThreadSafeIterator(iterable)
-        self.output_queue = Queue() if not ordered else OrderedOutputQueue()
+        self.output_queue = Queue()
 
         # State
         job_counter = count()
         state = IterationState()
         buffer = Buffer(maxsize=buffer_size, parallelism=parallelism)
+        ordered_output_buffer = OrderedOutputBuffer()
 
         def enqueue():
             while not self.teardown_event.is_set():
@@ -387,10 +394,14 @@ class LazyGroupedThreadPoolExecutor(object):
                     raise job.exc_info[1].with_traceback(job.exc_info[2])
 
                 # Actually yielding the value to main thread
-                yield job.result
+                if ordered:
+                    yield from ordered_output_buffer.output(job)
+                else:
+                    yield job.result
 
             # Sanity tests
             assert buffer.is_clean()
+            assert ordered_output_buffer.is_clean()
 
             # Making sure we are getting rid of the dispatcher thread
             dispatcher.join()
