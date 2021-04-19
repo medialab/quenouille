@@ -133,10 +133,10 @@ class Buffer(object):
 
         count = self.worked_groups.get(job.group, 0)
 
-        if count < self.parallelism:
-            return True
+        if job.throttling != 0 and count != 0:
+            return False
 
-        return False
+        return count < self.parallelism
 
     def can_work(self, job: Job):
         with self.lock:
