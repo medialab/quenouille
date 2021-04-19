@@ -29,6 +29,7 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
 # TODO: test buffer_size = 0
 # TODO: test with small buffer sizes
 # TODO: disclaimer about memory in the ordered case
+# TODO: using the same executor in different threads is not safe!
 
 
 class IterationState(object):
@@ -97,14 +98,14 @@ class Buffer(object):
         # Containers
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
-        self.times = {}
+        self.throttled_groups = set()
 
     def is_clean(self):
         with self.lock:
             return (
                 len(self.items) == 0 and
                 len(self.worked_groups) == 0 and
-                len(self.times) == 0
+                len(self.throttled_groups) == 0
             )
 
     def __full(self):
@@ -133,8 +134,12 @@ class Buffer(object):
 
         count = self.worked_groups.get(job.group, 0)
 
-        if job.throttling != 0 and count != 0:
-            return False
+        if job.throttling != 0:
+            if count != 0:
+                return False
+
+            if job.group in self.throttled_groups:
+                return False
 
         return count < self.parallelism
 
@@ -286,6 +291,7 @@ class LazyGroupedThreadPoolExecutor(object):
         self.output_queue = None
         self.teardown_event = Event()
         self.teardown_lock = Lock()
+        self.teardown_callbacks = {}
         self.closed = False
 
         self.threads = [
@@ -331,6 +337,9 @@ class LazyGroupedThreadPoolExecutor(object):
 
             self.closed = True
 
+            for callback in self.teardown_callbacks.values():
+                callback()
+
     def __worker(self):
         while not self.teardown_event.is_set():
             job = get(self.job_queue)
@@ -354,6 +363,9 @@ class LazyGroupedThreadPoolExecutor(object):
         state = IterationState()
         buffer = Buffer(maxsize=buffer_size, parallelism=parallelism)
         ordered_output_buffer = OrderedOutputBuffer()
+
+        # Teardown callbacks
+        # self.teardown_callbacks['test'] = lambda: print('test callback')
 
         def enqueue():
             while not self.teardown_event.is_set():
