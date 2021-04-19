@@ -24,6 +24,7 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE
 # TODO: still test the iterator to queue (reverse than the current queue to iterator, with blocking)
 # TODO: maybe the conditions in OrderedOutputQueue and Buffer must be shuntable
 # TODO: there seems to be room for improvement regarding keyboardinterrupts etc. wrapping enqueue + __worker? to test, raise KeyboardInterrupt
+# TODO: ^ also check the timer_callback and maybe put a large time.sleep in thread func to test SIGINT
 # TODO: validate iterable, func, threads
 # TODO: transfer doctypes from imap_old
 # TODO: test buffer_size = 0
