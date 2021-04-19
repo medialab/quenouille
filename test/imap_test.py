@@ -71,7 +71,12 @@ class TestImap(object):
 
         assert set(results) == set([('A', 0.2, 1), ('A', 0.3, 0)])
 
-    def test_one(self):
+    def test_one_thread(self):
+        results = list(imap(DATA, sleeper, 1))
+
+        assert results == DATA
+
+    def test_one_item(self):
         results = list(imap_unordered(DATA[:1], sleeper, 2))
 
         assert results == [('A', 0.3, 0)]
