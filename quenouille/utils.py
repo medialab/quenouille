@@ -100,24 +100,20 @@ class QueueIterator(object):
         with self.condition:
             self.condition.notify_all()
 
+    def __threads_still_working(self):
+        return self.working_threads != 0
+
     def task_done(self):
         with self.lock:
             return self.__dec()
 
-    def __threads_still_working(self):
-        return self.working_threads != 0
-
     def __iter__(self):
-        return self
-
-    def __next__(self):
-
         while True:
             with self.lock:
 
                 # If queue is empty and all threads finished we stop
                 if self.queue.empty() and not self.__threads_still_working():
-                    raise StopIteration
+                    break
 
             # The queue is empty but some threads are still working, we need to wait
             if self.queue.empty():
@@ -131,13 +127,8 @@ class QueueIterator(object):
                 item = get(self.queue)
                 self.__inc()
 
-            return item
-
-    def __enter__(self):
-        pass
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.task_done()
+            yield item
+            self.task_done()
 
 
 class SmartTimer(Timer):

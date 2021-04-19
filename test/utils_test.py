@@ -26,13 +26,7 @@ class TestUtils(object):
         q.put(3)
 
         iterator = QueueIterator(q)
-
-        def consume():
-            for i in iterator:
-                with iterator:
-                    yield i
-
-        result = list(consume())
+        result = list(iterator)
 
         assert result == [2, 1, 3]
 
@@ -48,18 +42,16 @@ class TestUtils(object):
 
         def consume():
             for idx, i in enumerate(iterator):
-                with iterator:
+                if i == 1:
+                    q.put(2)
+                    q.put(3)
 
-                    if i == 1:
-                        q.put(2)
-                        q.put(3)
+                if i == 3:
+                    q.put(4)
 
-                    if i == 3:
-                        q.put(4)
+                time.sleep(idx * 0.01)
 
-                    time.sleep(idx * 0.01)
-
-                    yield i
+                yield i
 
         result = list(consume())
 
