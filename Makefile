@@ -29,7 +29,7 @@ hint:
 
 unit:
 	@echo Running unit tests...
-	pytest -sv
+	pytest -svvv
 	@echo
 
 upload:

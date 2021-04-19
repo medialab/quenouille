@@ -125,6 +125,13 @@ class Buffer(object):
         with self.lock:
             return self.__can_work(job)
 
+    def __find_suitable_job(self):
+        for job in self.items.values():
+            if self.__can_work(job):
+                return job
+
+        return None
+
     def put(self, job: Job):
         """
         Add a value to the buffer and blocks if the buffer is already full.
@@ -152,21 +159,15 @@ class Buffer(object):
                 self.lock.release()
                 return None
 
-            suitable_job = None
+            job = self.__find_suitable_job()
 
-            for job in self.items.values():
-                if self.__can_work(job):
-                    suitable_job = job
-                    break
-
-            if suitable_job is not None:
-                job = self.items.popitem(id(job))[1]
+            if job is not None:
+                self.items.popitem(id(job))
                 self.lock.release()
                 return job
 
-            self.lock.release()
-
             if self.__full():
+                self.lock.release()
 
                 # TODO: with throttling, we might want to block until timer is free
                 with self.condition:
@@ -175,6 +176,7 @@ class Buffer(object):
                 # Simulating recursion
                 continue
 
+            self.lock.release()
             return None
 
         raise RuntimeError
@@ -327,8 +329,8 @@ class LazyGroupedThreadPoolExecutor(object):
                     continue
 
                 # Registering the job
-                state.start_task()
                 buffer.register_job(job)
+                state.start_task()
                 put(self.job_queue, job)
 
         def output():
@@ -337,8 +339,8 @@ class LazyGroupedThreadPoolExecutor(object):
 
                 # Acknowledging this job was finished
                 self.output_queue.task_done()
-                state.finish_task()
                 buffer.unregister_job(job)
+                state.finish_task()
 
                 # Raising an error that occurred within worker function
                 if job.exc_info is not None:
