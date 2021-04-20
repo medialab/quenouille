@@ -54,6 +54,16 @@ with open(csv_path, 'r') as f:
   for html in imap(urls, fetch, 10, key=domain_name, throttle=5):
     print(html)
 
+  # Throttle time depending on domain
+  def throttle(group, item):
+    if group == 'lemonde.fr':
+      return 10
+
+    return 2
+
+  for html in imap(urls, fetch, 10, key=domain_name, throttle=throttle):
+    print(html)
+
   # Only load 10 urls into memory when attempting to find next suitable job
   for html in imap(urls, fetch, 10, key=domain_name, throttle=5, buffer_size=10):
     print(html)
@@ -125,6 +135,75 @@ with ThreadPoolExecutor(max_workers=4) as executor:
 
 ### Miscellaneous notes
 
-TODO: examples and caveats, link to minet
+#### The None group
 
-https://yomguithereal.github.io/posts/contiguous-range-set/
+The `imap` functions consider the `None` group (this can happen if your `key` function returns `None`) as special and will always consider the attached items can be processed right away without parallelism constraints nor throttle.
+
+#### None parallelism
+
+`parallelism` can be callable and return `None` for some groups, meaning those won't be affected by parallelism constraints, e.g. any numbers of workers will be able to work on this group at once.
+
+#### Parallelism > workers
+
+If you set `parallelism` to `10` and only allocate `5` threads to perform your tasks, it should be obvious that the actual parallelism will never reach `10`.
+
+`quenouille` won't warn you of this because it might be convenient not to give this too much thought and has not much consequence, but keep this in mind.
+
+#### Callable parallelism guarantees
+
+If you decide to pass a function to declare a custom parallelism for each group rather than a global fixed one, know that the function will be called each time `quenouille` has to make a decision regarding the next items to enqueue so that we don't use any memory to record the information.
+
+This means that you should guarantee that the given function is idempotent and will always return the same parallelism for a given group if you don't want to risk a deadlock.
+
+#### Parallelism vs. throttling
+
+If a group is being trottled, it should be obvious that `quenouille` won't perform more than one single task for this group at once, so its `parallelism` is in fact `1`, in spite of other settings.
+
+This does not mean that `parallelism` for some groups and `throttle` for others is impossible. This can be achieved through callable kwargs.
+
+#### Adding entropy to throttle
+
+You can understand the callable `throttle` kwarg as "what's the minimum time the next job from this group should wait before firing up". This means that if you need to add entropy to the throttle time, you can indeed make this function work with randomness like so:
+
+```python
+from random import random
+
+# Waiting 5 + (between 0 and 2) seconds
+def throttle(group, item):
+  return 5 + (2 * random())
+```
+
+#### Caveats of using imap with queues
+
+*Typical deadlocks*
+
+Even if `imap` can process an input queue, one should note that you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. This can be easy to footgun yourself if your queue has a `maxsize`, for instance:
+
+```python
+from queue import Queue
+from quenouille import imap
+
+job_queue = Queue(maxsize=2)
+job_queue.put(1)
+
+for i in imap(job_queue, worker):
+  if i < 2:
+    job_queue.put(2)
+    job_queue.put(3)
+
+    # This will put you in a deadlock because this will block
+    # because of the queue `maxsize` set to 2
+    job_queue.put(4)
+
+  print(i)
+```
+
+*Design choices*
+
+To enable you to add items to the queue in your loop body and so it can safely detect when your queue is drained without race condition, `quenouille` acknowledges that a task is finished only after what you execute in the loop body is done.
+
+This means that sometimes it might be more performant to only add items to the queue from the worker functions rather than from the loop body.
+
+*queue.task_done*
+
+For now, `quenouille` does not call `queue.task_done` for you, so this remains your responsability, if you want to be able to call `queue.join` down the lane.

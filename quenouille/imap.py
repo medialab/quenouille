@@ -28,18 +28,6 @@ from quenouille.constants import (
     DEFAULT_BUFFER_SIZE
 )
 
-# TODO: doc document the fact that blocking input queue in iterator loop is unwise + task_done on your own
-# TODO: doc the fact that it is better to enqueue from workers?
-# TODO: doc disclaimer about memory in the ordered case
-# TODO: doc parallelism > workers
-# TODO: doc callable parallelism be sure to return same per domain, + not more than threads
-# TODO: doc None group is never throttled!
-# TODO: doc what about parallelism > 1 and throttle > 0?
-# TODO: doc or test footgun of queue with maxsize < max_workers (raise error if possible?)
-# TODO: doc queue until drain
-# TODO: doc parallelism callable returning None
-# TODO: doc throttle entropy
-
 
 class Job(object):
     """
