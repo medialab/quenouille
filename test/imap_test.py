@@ -323,9 +323,6 @@ class TestImap(object):
 
     def test_queue(self):
         # TODO: try with maxsize
-        # TODO: test empty queue
-        # TODO: also try with q.put into imap loop
-        # TODO: when is task_done necessary
         q = queue_from([1])
 
         def worker(i):
@@ -369,3 +366,9 @@ class TestImap(object):
 
         assert q.empty()
         assert result == [1, 2, 3, 4, 4, 5, 5]
+
+        q = queue_from([])
+        result = list(imap(q, worker, 2))
+
+        assert q.empty()
+        assert result == []
