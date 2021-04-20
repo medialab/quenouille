@@ -387,3 +387,8 @@ class TestImap(object):
 
         assert q.empty()
         assert result == []
+
+    def test_default_threads(self):
+        result = list(imap(DATA, identity))
+
+        assert result == DATA

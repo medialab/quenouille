@@ -4,6 +4,7 @@
 #
 # Miscellaneous utility functions.
 #
+import os
 import time
 from threading import Lock, Condition, Timer
 from queue import Empty, Full
@@ -49,6 +50,11 @@ def is_queue(v):
         hasattr(v, 'task_done') and
         callable(v.task_done)
     )
+
+
+# As per: https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
+def get_default_maxworkers():
+    return min(32, os.cpu_count() + 4)
 
 
 class ThreadSafeIterator(object):

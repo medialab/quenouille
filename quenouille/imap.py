@@ -19,6 +19,7 @@ from quenouille.utils import (
     flush,
     smash,
     is_queue,
+    get_default_maxworkers,
     ThreadSafeIterator,
     SmartTimer
 )
@@ -371,7 +372,10 @@ class OutputContext(object):
             return True
 
 
-def validate_max_workers(name, max_workers):
+def validate_max_workers(name, max_workers=None):
+    if max_workers is None:
+        return
+
     if not isinstance(max_workers, int) or max_workers < 1:
         raise TypeError('"%s" should be an integer > 0' % name)
 
@@ -408,8 +412,11 @@ def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffe
 
 
 class ThreadPoolExecutor(object):
-    def __init__(self, max_workers):
+    def __init__(self, max_workers=None):
         validate_max_workers('max_workers', max_workers)
+
+        if max_workers is None:
+            max_workers = get_default_maxworkers()
 
         self.max_workers = max_workers
         self.job_queue = Queue(maxsize=max_workers)
@@ -701,7 +708,7 @@ class ThreadPoolExecutor(object):
         )
 
 
-def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
+def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
                    buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
     validate_max_workers('threads', threads)
@@ -716,7 +723,7 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
     )
 
     if isinstance(iterable, Sized):
-        threads = min(len(iterable), threads)
+        threads = min(len(iterable), threads or float('inf'))
 
     def generator():
         with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -732,7 +739,7 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
     return generator()
 
 
-def imap(iterable, func, threads, *, key=None, parallelism=1,
+def imap(iterable, func, threads=None, *, key=None, parallelism=1,
          buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
 
     validate_max_workers('threads', threads)
@@ -747,7 +754,7 @@ def imap(iterable, func, threads, *, key=None, parallelism=1,
     )
 
     if isinstance(iterable, Sized):
-        threads = min(len(iterable), threads)
+        threads = min(len(iterable), threads or float('inf'))
 
     def generator():
         with ThreadPoolExecutor(max_workers=threads) as executor:
