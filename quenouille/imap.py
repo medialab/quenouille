@@ -26,6 +26,7 @@ from quenouille.constants import (
     DEFAULT_BUFFER_SIZE
 )
 
+# TODO: clamp number of threads based on iterable size
 # TODO: fully document this complex code...
 # TODO: handle queues natively (process queue until drained, or closable queue?)
 # TODO: doc disclaimer about memory in the ordered case
@@ -38,6 +39,8 @@ from quenouille.constants import (
 
 
 class Job(object):
+    __slots__ = ('func', 'args', 'kwargs', 'index', 'group', 'result', 'exc_info', 'throttling')
+
     def __init__(self, func, args, kwargs={}, index=None, group=None, throttling=0):
         self.func = func
         self.args = args
