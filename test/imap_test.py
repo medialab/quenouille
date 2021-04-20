@@ -345,27 +345,27 @@ class TestImap(object):
             return i
 
         result = list(imap(q, worker, 2))
+        assert q.empty()
         assert result == [1, 2, 3, 4, 4, 5, 5]
 
-        # q = queue_from([1])
-        # result = []
+        q = queue_from([1])
+        result = []
 
-        # import threading
+        for i in imap(q, identity, 2):
+            result.append(i)
 
-        # for i in imap(q, identity, 2):
-        #     result.append(i)
-        #     print('unrelated')
-        #     if i == 1:
-        #         put(q, 2)
-        #         put(q, 3)
-        #         put(q, 4)
+            if i == 1:
+                put(q, 2)
+                put(q, 3)
+                put(q, 4)
 
-        #     if i == 3:
-        #         put(q, 4)
+            if i == 3:
+                put(q, 4)
 
-        #     time.sleep(0.01)
+            time.sleep(0.01)
 
-        #     if i == 4:
-        #         put(q, 5)
+            if i == 4:
+                put(q, 5)
 
-        # assert result == [1, 2, 3, 4, 4, 5, 5]
+        assert q.empty()
+        assert result == [1, 2, 3, 4, 4, 5, 5]

@@ -607,7 +607,7 @@ class ThreadPoolExecutor(object):
             self.imap_lock.release()
 
         def output():
-            yield_lock = Lock()  # NOTE: I can't be sure this lock is necessary
+            yield_lock = Lock()  # NOTE: I am not sure this lock is necessary
 
             with OutputContext(cleanup):
                 while not state.should_stop() and not end_event.is_set():
@@ -620,10 +620,11 @@ class ThreadPoolExecutor(object):
                     if isinstance(job, BaseException):
                         raise job
 
-                    # Acknowledging this job was finished
+                    # Releasing task in output queue
                     self.output_queue.task_done()
+
+                    # Unregistering job in buffer to let other threads continue working
                     buffer.unregister_job(job)
-                    state.finish_task()
 
                     # Raising an error that occurred within worker function
                     # NOTE: shenanigans with tracebacks don't seem to change anything
@@ -636,6 +637,12 @@ class ThreadPoolExecutor(object):
                             yield from ordered_output_buffer.output(job)
                         else:
                             yield job.result
+
+                    # Acknowledging this job was finished
+                    # NOTE: this was moved after yielding items so that the
+                    # generator body may enqueue new jobs. It is possible that
+                    # this has a slight perf hit if the body performs heavy work?
+                    state.finish_task()
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
