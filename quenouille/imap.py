@@ -28,46 +28,6 @@ from quenouille.constants import (
     DEFAULT_BUFFER_SIZE
 )
 
-
-def generate_function_doc(ordered=False):
-    disclaimer = 'Note that results will be yielded in an arbitrary order.'
-
-    if ordered:
-        disclaimer = 'Note that results will be yielded in same order as the input.'
-
-    return (
-        """
-        Function consuming tasks from any iterable, dispatching them to a pool
-        of worker threads to finally yield the produced results.
-
-        {disclaimer}
-
-        Args:
-            iterable (iterable or queue): iterable of items to process or queue of
-                items to process.
-            func (callable): The task to perform with each item.
-            threads (int, optional): The number of threads to use.
-                Defaults to min(32, os.cpu_count() + 1).
-            key (callable, optional): Function returning to which "group" a given
-                item is supposed to belong. This will be used to ensure maximum
-                group parallelism is respected.
-            parallelism (int or callable, optional): Number of threads allowed to work
-                on the same group at once. Can also be a function taking groups and
-                returning their parallelism. Defaults to 1.
-            buffer_size (int, optional): Max number of items the function will
-                buffer into memory while attempting to find an item that can be
-                passed to a worker immediately, while respecting throttling and
-                group parallelism. Defaults to 1024.
-            throttle (float or callable, optional): Optional throttle time to
-                wait between two of a same group's items. Can also be a function
-                taking the group & current item and returning the throttle time.
-
-        Yields:
-            any: Will yield results based on given worker function.
-
-        """
-    ).format(disclaimer=disclaimer)
-
 # TODO: fully document this complex code...
 # TODO: doc document the fact that blocking input queue in iterator loop is unwise + task_done on your own
 # TODO: doc the fact that it is better to enqueue from workers?
@@ -83,6 +43,10 @@ def generate_function_doc(ordered=False):
 
 
 class Job(object):
+    """
+    Class representing a job to be performed by a worker thread.
+    """
+
     __slots__ = ('func', 'args', 'kwargs', 'index', 'group', 'result', 'exc_info', 'throttling')
 
     def __init__(self, func, args, kwargs={}, index=None, group=None, throttling=0):
@@ -117,6 +81,12 @@ class Job(object):
 
 
 class IterationState(object):
+    """
+    Class representing an executor imap iteration state. It keeps tracks of
+    counts of jobs started and finished, and is used to declare the end of
+    the iterated stream so that everything can be synchronized.
+    """
+
     def __init__(self):
         self.lock = Lock()
         self.started_count = 0
@@ -165,6 +135,18 @@ class IterationState(object):
 
 
 class Buffer(object):
+    """
+    Class tasked with an executor imap buffer where jobs are enqueued when
+    read from the iterated stream.
+
+    It's this class' job to emit items that can be processed by worker threads
+    while respecting group parallelism constraints and throttling.
+
+    Its #.get method can block when not suitable item can be emitted.
+
+    Its #.put method will never block and should raise if putting the buffer
+    into an incoherent state.
+    """
     def __init__(self, output_queue, maxsize=1, parallelism=1):
 
         # Properties
@@ -379,6 +361,14 @@ class Buffer(object):
 
 
 class OrderedOutputBuffer(object):
+    """
+    Class in charge of yielding values in the same order as they were extracted
+    from the iterated stream.
+
+    Note that this requires to buffer values into memory until the next valid
+    item has been processed by a worker thread.
+    """
+
     def __init__(self):
         self.last_index = 0
         self.items = {}
@@ -401,6 +391,11 @@ class OrderedOutputBuffer(object):
 
 
 class OutputContext(object):
+    """
+    Context used by an executor imap output generator to ensure we don't forget
+    to cleanup when everything has been processed or when an error was raised.
+    """
+
     def __init__(self, cleanup):
         self.cleanup = cleanup
 
@@ -454,6 +449,16 @@ def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffe
 
 
 class ThreadPoolExecutor(object):
+    """
+    Quenouille custom ThreadPoolExecutor able to lazily pull items to process
+    from iterated streams, all while bounding used memory and respecting
+    group parallelism and throttling.
+
+    Args:
+        max_workers (int, optional): Number of threads to use.
+            Defaults to min(32, os.cpu_count() + 1).
+    """
+
     def __init__(self, max_workers=None):
         validate_max_workers('max_workers', max_workers)
 
@@ -816,6 +821,47 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
             )
 
     return generator()
+
+
+def generate_function_doc(ordered=False):
+    disclaimer = 'Note that results will be yielded in an arbitrary order.'
+
+    if ordered:
+        disclaimer = 'Note that results will be yielded in same order as the input.'
+
+    return (
+        """
+        Function consuming tasks from any iterable, dispatching them to a pool
+        of worker threads to finally yield the produced results.
+
+        {disclaimer}
+
+        Args:
+            iterable (iterable or queue): iterable of items to process or queue of
+                items to process.
+            func (callable): The task to perform with each item.
+            threads (int, optional): Number of threads to use.
+                Defaults to min(32, os.cpu_count() + 1).
+            key (callable, optional): Function returning to which "group" a given
+                item is supposed to belong. This will be used to ensure maximum
+                group parallelism is respected.
+            parallelism (int or callable, optional): Number of threads allowed to work
+                on the same group at once. Can also be a function taking groups and
+                returning their parallelism. Defaults to 1.
+            buffer_size (int, optional): Max number of items the function will
+                buffer into memory while attempting to find an item that can be
+                passed to a worker immediately, while respecting throttling and
+                group parallelism. Defaults to 1024.
+            throttle (float or callable, optional): Optional throttle time to
+                wait between two of a same group's items. Can also be a function
+                taking the group & current item and returning the throttle time.
+
+        Yields:
+            any: Will yield results based on given worker function.
+
+        """
+    ).format(disclaimer=disclaimer)
+
 
 imap_unordered.__doc__ = generate_function_doc()
 imap.__doc__ = generate_function_doc(ordered=True)
