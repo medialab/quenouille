@@ -723,7 +723,10 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
     )
 
     if isinstance(iterable, Sized):
-        threads = min(len(iterable), threads or float('inf'))
+        threads = min(
+            len(iterable),
+            threads or float('inf')
+        )
 
     def generator():
         with ThreadPoolExecutor(max_workers=threads) as executor:
@@ -754,7 +757,10 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
     )
 
     if isinstance(iterable, Sized):
-        threads = min(len(iterable), threads or float('inf'))
+        threads = min(
+            len(iterable),
+            threads or float('inf')
+        )
 
     def generator():
         with ThreadPoolExecutor(max_workers=threads) as executor:
