@@ -849,11 +849,11 @@ def generate_function_doc(ordered=False):
                 returning its parallelism. Defaults to 1.
             buffer_size (int, optional): Max number of items the function will
                 buffer into memory while attempting to find an item that can be
-                passed to a worker immediately, while respecting throttling and
+                passed to a worker immediately, all while respecting throttling and
                 group parallelism. Defaults to 1024.
             throttle (float or callable, optional): Optional throttle time, in
                 seconds, to wait before processing the next item of a given group.
-                Can also be a function taking the current item with its group and
+                Can also be a function taking the current item preceded by its group and
                 returning the next throttle time.
 
         Yields:

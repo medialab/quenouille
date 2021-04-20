@@ -79,12 +79,12 @@ with open(csv_path, 'r') as f:
 *Arguments*
 
 * **iterable** *iterable*: Any python iterable.
-* **func** *callable*: Function used to perform the desired tasks. The function takes any item yielded from the given iterable as sole argument. Note that since this function will be dispatched in worker threads, you should ensure it is thread-safe.
+* **func** *callable*: Function used to perform the desired tasks. The function takes an item yielded by the given iterable as single argument. Note that since this function will be dispatched in worker threads, so you should ensure it is thread-safe.
 * **threads** *?int*: Maximum number of threads to use. Defaults to `min(32, os.cpu_count() + 1)`
 * **key** *?callable*: Function returning to which "group" a given item is supposed to belong. This will be used to ensure maximum parallelism is respected.
 * **parallelism** *?int|callable* [`1`]: Number of threads allowed to work on a same group at once. Can also be a function taking a group and returning its parallelism.
-* **buffer_size** *?int* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find and item that can be passed to a worker immediately, while respecting throttling and group parallelism.
-* **throttle** *?int|float|callable*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking the current item, with its group and returning the next throttle time.
+* **buffer_size** *?int* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find an item that can be passed to a worker immediately, all while respecting throttling and group parallelism.
+* **throttle** *?int|float|callable*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking the current item, preceded by its group and returning the next throttle time.
 
 *Using a queue rather than an iterable*
 
@@ -123,7 +123,7 @@ results
 >>> [2, 4, 6]
 ```
 
-Note that the function will only run until the queue is fully drained. So if you decide to add more items afterwards, this is not the function's concern anymore.
+Note that `imap` will only run until the queue is fully drained. So if you decide to add more items afterwards, this is not the function's concern anymore.
 
 ### ThreadPoolExecutor
 
@@ -166,7 +166,7 @@ This means that you should guarantee that the given function is idempotent and w
 
 If a group is being trottled, it should be obvious that `quenouille` won't perform more than one single task for this group at once, so its `parallelism` is in fact `1`, in spite of other settings.
 
-This does not mean that `parallelism` for some groups and `throttle` for others is impossible. This can be achieved through callable kwargs.
+This does not mean that `parallelism` for some groups and `throttle` for others is impossible. This can be achieved through callables.
 
 #### Adding entropy to throttle
 
@@ -184,7 +184,7 @@ def throttle(group, item):
 
 *Typical deadlocks*
 
-Even if `imap` can process an input queue, one should note that you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. This can be easy to footgun yourself if your queue has a `maxsize`, for instance:
+Even if `imap` can process an input queue, one should note that you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. It can be easy to footgun yourself if your queue has a `maxsize`, for instance:
 
 ```python
 from queue import Queue
