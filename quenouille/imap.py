@@ -31,10 +31,8 @@ from quenouille.constants import (
 # TODO: doc disclaimer about memory in the ordered case
 # TODO: callable parallelism
 # TODO: doc None group is never throttled!
-# TODO: type checking callable throttle?
-# TODO: what about parallelism > 1 and throttle > 0?
+# TODO: doc: what about parallelism > 1 and throttle > 0?
 # TODO: args, kwargs callable from item
-# TODO: base exec catch should capture trace and smash a result (maybe drop try in job execution then)
 
 
 class Job(object):
@@ -515,6 +513,12 @@ class ThreadPoolExecutor(object):
 
                         if callable(throttle):
                             throttling = throttle(group, item)
+
+                            if throttling is None:
+                                throttling = 0
+
+                            if not isinstance(throttling, (int, float)):
+                                raise TypeError('callable "throttle" should return numbers')
 
                         job = Job(
                             func,

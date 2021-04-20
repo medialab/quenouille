@@ -219,6 +219,12 @@ class TestImap(object):
         with pytest.raises(TypeError):
             list(imap_unordered(range(5), identity, 4, throttle=hellraiser))
 
+        def wrong_type(g, i):
+            return 'test'
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 2, throttle=wrong_type))
+
     def test_executor(self):
         with ThreadPoolExecutor(max_workers=4) as executor:
             result = list(executor.imap(DATA, sleeper))
