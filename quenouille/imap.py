@@ -28,6 +28,46 @@ from quenouille.constants import (
     DEFAULT_BUFFER_SIZE
 )
 
+
+def generate_function_doc(ordered=False):
+    disclaimer = 'Note that results will be yielded in an arbitrary order.'
+
+    if ordered:
+        disclaimer = 'Note that results will be yielded in same order as the input.'
+
+    return (
+        """
+        Function consuming tasks from any iterable, dispatching them to a pool
+        of worker threads to finally yield the produced results.
+
+        {disclaimer}
+
+        Args:
+            iterable (iterable or queue): iterable of items to process or queue of
+                items to process.
+            func (callable): The task to perform with each item.
+            threads (int, optional): The number of threads to use.
+                Defaults to min(32, os.cpu_count() + 1).
+            key (callable, optional): Function returning to which "group" a given
+                item is supposed to belong. This will be used to ensure maximum
+                group parallelism is respected.
+            parallelism (int or callable, optional): Number of threads allowed to work
+                on the same group at once. Can also be a function taking groups and
+                returning their parallelism. Defaults to 1.
+            buffer_size (int, optional): Max number of items the function will
+                buffer into memory while attempting to find an item that can be
+                passed to a worker immediately, while respecting throttling and
+                group parallelism. Defaults to 1024.
+            throttle (float or callable, optional): Optional throttle time to
+                wait between two of a same group's items. Can also be a function
+                taking the group & current item and returning the throttle time.
+
+        Yields:
+            any: Will yield results based on given worker function.
+
+        """
+    ).format(disclaimer=disclaimer)
+
 # TODO: fully document this complex code...
 # TODO: doc document the fact that blocking input queue in iterator loop is unwise + task_done on your own
 # TODO: doc the fact that it is better to enqueue from workers?
@@ -38,6 +78,8 @@ from quenouille.constants import (
 # TODO: doc what about parallelism > 1 and throttle > 0?
 # TODO: doc or test footgun of queue with maxsize < max_workers (raise error if possible?)
 # TODO: doc queue until drain
+# TODO: parallelism callable returning None
+# TODO: doc throttle entropy
 
 
 class Job(object):
@@ -774,3 +816,6 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
             )
 
     return generator()
+
+imap_unordered.__doc__ = generate_function_doc()
+imap.__doc__ = generate_function_doc(ordered=True)
