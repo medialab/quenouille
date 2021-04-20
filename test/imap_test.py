@@ -293,6 +293,16 @@ class TestImap(object):
             for i in imap(range(6, 15), hellraiser, 4):
                 pass
 
+    def test_key_raise(self):
+        def group(i):
+            if i > 2:
+                raise RuntimeError
+
+            return 'SAME'
+
+        with pytest.raises(RuntimeError):
+            list(imap_unordered(range(5), identity, 2, key=group))
+
     def test_executor(self):
         with ThreadPoolExecutor(max_workers=4) as executor:
             result = list(executor.imap(DATA, sleeper))
