@@ -5,422 +5,863 @@
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
 import sys
-from queue import Queue, Full
-from random import random
-from collections import defaultdict, deque, Counter
-from threading import Condition, Event, Lock, Thread, Timer
+import time
+from queue import Queue, Empty
+from threading import Thread, Event, Lock, Condition
+from collections import OrderedDict
+from collections.abc import Iterable, Sized
+from itertools import count
 
-from quenouille.thread_safe_iterator import ThreadSafeIterator
-
+from quenouille.utils import (
+    get,
+    put,
+    clear,
+    flush,
+    smash,
+    is_queue,
+    get_default_maxworkers,
+    ThreadSafeIterator,
+    SmartTimer
+)
 from quenouille.constants import (
-    FOREVER,
     THE_END_IS_NIGH,
-    EVERYTHING_MUST_BURN,
-    THE_WAIT_IS_OVER,
-    INFINITY
+    DEFAULT_BUFFER_SIZE
 )
 
 
-# The implementation
-# -----------------------------------------------------------------------------
-def generic_imap(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                 group=None, group_buffer_size=1, group_throttle=0, listener=None):
+class Job(object):
     """
-    Function consuming tasks from any iterable, dispatching them to a pool
-    of threads and finally yielding the produced results.
-
-    Args:
-        iterable (iterable): iterable of jobs.
-        func (callable): The task to perform with each job.
-        threads (int): The number of threads to use.
-        ordered (bool, optional): Whether to yield results in order or not.
-            Defaults to `False`.
-        group_parallelism (int, optional): Number of threads allowed to work
-            on the same group at once. Defaults to no limit.
-        group (callable, optional): Function returning a job's group.
-            This argument is required if you need to restrict group parallelism.
-        group_buffer_size (int, optional): Max number of jobs that the function
-            will buffer into memory when waiting for a thread to be available.
-            Defaults to 1.
-        group_throttle (float or callable, optional): Optional throttle time to
-            wait between each task per group. Can also be a function taking
-            the group & current item and returning the throttle time.
-        listener (callable, optional): Function that will be called when
-            some events occur to be able to track progress.
-
-    Yields:
-        any: will yield results based on the given job.
-
+    Class representing a job to be performed by a worker thread.
     """
 
-    throttling = group_throttle != 0
-    handling_group_parallelism = group_parallelism != INFINITY or throttling
+    __slots__ = ('func', 'args', 'kwargs', 'index', 'group', 'result', 'exc_info', 'throttling')
 
-    # Checking arguments
-    if not isinstance(threads, (int, float)) or threads < 1:
-        raise TypeError('quenouille/imap: `threads` should be a positive number.')
+    def __init__(self, func, args, kwargs={}, index=None, group=None, throttling=0):
+        self.func = func
+        self.args = args
+        self.kwargs = kwargs
+        self.index = index
+        self.group = group
+        self.result = None
+        self.exc_info = None
+        self.throttling = throttling
 
-    if not callable(func):
-        raise TypeError('quenouille/imap: `func` should be callable.')
+    def __call__(self):
+        try:
+            self.result = self.func(*self.args, **self.kwargs)
+        except BaseException as e:
 
-    if not isinstance(group_buffer_size, (int, float)) or group_buffer_size < 1:
-        raise TypeError('quenouille/imap: `group_buffer_size` should be a positive number.')
+            # We catch the exception before flushing downstream to be
+            # sure the job can be passed down the line but it might not be
+            # the best thing to do. Time will tell...
+            self.exc_info = sys.exc_info()
 
-    if not callable(group_throttle) and group_throttle != 0 and (not isinstance(group_throttle, (int, float)) or group_throttle < 0):
-        raise TypeError('quenouille/imap: `group_throttle` should be >= 0 or a function.')
+    def __repr__(self):
+        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}{throttling}>'.format(
+            name=self.__class__.__name__,
+            index=self.index,
+            group=self.group,
+            args=self.args,
+            id=id(self),
+            throttling=(' throttling={!r}'.format(self.throttling) if self.throttling else '')
+        )
 
-    if listener is not None and not callable(listener):
-        raise TypeError('quenouille/imap: `listener` should be callable if provided.')
 
-    if handling_group_parallelism and not callable(group):
-        raise TypeError('quenouille/imap: `group` is not callable and is required with `group_parallelism` or `group_throttle`')
+class IterationState(object):
+    """
+    Class representing an executor imap iteration state. It keeps tracks of
+    counts of jobs started and finished, and is used to declare the end of
+    the iterated stream so that everything can be synchronized.
+    """
 
-    getgroup = lambda x: group(x[1])
+    def __init__(self):
+        self.lock = Lock()
+        self.started_count = 0
+        self.finished_count = 0
+        self.finished = False
+        self.task_is_finished = Condition()
 
-    # Making our iterable a thread-safe iterator
-    safe_iterator = ThreadSafeIterator(enumerate(iterable))
+    def start_task(self):
+        with self.lock:
+            self.started_count += 1
 
-    # One queue for jobs to do & one queue to output their results
-    input_queue = Queue(maxsize=threads)
-    output_queue = Queue()
+    def finish_task(self):
+        with self.lock:
+            self.finished_count += 1
 
-    # A counter on finished threads to be able to know when to end output queue
-    finished_counter = 0
+        with self.task_is_finished:
+            self.task_is_finished.notify_all()
 
-    # A last index counter to be able to ouput results in order if needed
-    last_index = -1
-    last_index_condition = Condition()
+    def wait_for_any_task_to_finish(self):
+        with self.task_is_finished:
+            self.task_is_finished.wait()
 
-    # State
-    enqueue_lock = Lock()
-    listener_lock = Lock()
-    yield_lock = Lock()
-    termination_event = Event()
-    timer_condition = Condition()
-    worked_groups = Counter()
-    buffers = defaultdict(lambda: Queue(maxsize=group_buffer_size))
-    waiters = defaultdict(deque)
-    timers = {}
+    def has_running_tasks(self):
+        with self.lock:
+            return self.started_count > self.finished_count
 
-    # Closures
-    def emit(event, job):
-        if listener is not None:
-            with listener_lock:
-                listener(event, job)
+    def declare_end(self):
+        with self.lock:
+            self.finished = True
+            return self.__should_stop()
 
-    def enqueue(last_group=None):
+    def __should_stop(self):
+        return self.finished and self.finished_count == self.started_count
+
+    def should_stop(self):
+        with self.lock:
+            return self.__should_stop()
+
+    def __repr__(self):
+        return '<{name}{finished} started={started!r} done={done!r}>'.format(
+            name=self.__class__.__name__,
+            finished=(' finished' if self.finished else ''),
+            started=self.started_count,
+            done=self.finished_count
+        )
+
+
+class Buffer(object):
+    """
+    Class tasked with an executor imap buffer where jobs are enqueued when
+    read from the iterated stream.
+
+    It's this class' job to emit items that can be processed by worker threads
+    while respecting group parallelism constraints and throttling.
+
+    Its #.get method can block when not suitable item can be emitted.
+
+    Its #.put method will never block and should raise if putting the buffer
+    into an incoherent state.
+    """
+    def __init__(self, output_queue, maxsize=1, parallelism=1):
+
+        # Properties
+        self.output_queue = output_queue
+        self.maxsize = maxsize
+        self.parallelism = parallelism
+
+        # Threading
+        self.condition = Condition()
+        self.lock = Lock()
+        self.throttle_timer = None
+
+        # Containers
+        self.items = OrderedDict()
+        self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
+        self.throttled_groups = {}
+
+    def __len__(self):
+        with self.lock:
+            return len(self.items)
+
+    def is_clean(self):
         """
-        Function consuming the iterable to pipe next job into the input queue
-        for the workers.
-
-        Args:
-            last_group (any): Last performed job's group. Useful to track limits etc.
-
+        This function is only used after an imap is over to ensure no
+        dangling resource could be found.
         """
-        nonlocal finished_counter
+        with self.lock:
+            return (
+                len(self.items) == 0 and
+                len(self.worked_groups) == 0 and
+                len(self.throttled_groups) == 0
+            )
 
-        # Acquiring a lock so no other thread may enter this part
-        enqueue_lock.acquire()
+    def __full(self):
+        count = len(self.items)
+        assert count <= self.maxsize
+        return count == self.maxsize
 
-        job = None
-        current_group = None
+    def full(self):
+        with self.lock:
+            return self.__full()
 
-        if last_group is not None and handling_group_parallelism:
-            if worked_groups[last_group] == 1:
-                del worked_groups[last_group]
-            else:
-                worked_groups[last_group] -= 1
+    def __empty(self):
+        count = len(self.items)
+        assert count <= self.maxsize
+        return count == 0
 
-        # NOTE: this loop is necessary to avoid recursion & stack overflow
-        recurse = True
+    def empty(self):
+        with self.lock:
+            return self.__empty()
 
-        while recurse:
-            recurse = False
+    def __can_work(self, job):
 
-            # Checking the buffers
-            if handling_group_parallelism:
-                current_group, buffer = next(
-                    ((k, b) for k, b in buffers.items() if worked_groups[k] < group_parallelism),
-                    (None, None)
-                )
+        # None group is the default and can always be processed without constraints
+        if job.group is None:
+            return True
 
-                if buffer is not None:
-                    if current_group in waiters:
-                        w = waiters[current_group]
-                        w.popleft().set()
+        count = self.worked_groups.get(job.group, 0)
 
-                        if len(w) == 0:
-                            del waiters[current_group]
+        if job.throttling != 0:
+            if count != 0:
+                return False
 
-                        job = buffer.get(timeout=FOREVER)
+            if job.group in self.throttled_groups:
+                return False
 
-                    elif not buffer.empty():
-                        job = buffer.get_nowait()
+        parallelism = self.parallelism
 
-                        if buffer.empty():
-                            del buffers[current_group]
+        if callable(self.parallelism):
+            parallelism = self.parallelism(job.group)
 
-            # Not suitable buffer found, let's consume the iterable!
-            while job is None:
+            # No parallelism for a group basically means it is not being constrained
+            if parallelism is None:
+                return True
 
-                # Avoiding a deadlock if the iterator needs to block
-                enqueue_lock.release()
-                job = next(safe_iterator, None)
-                enqueue_lock.acquire()
+            if not isinstance(parallelism, int) or parallelism < 1:
+                raise TypeError('callable "parallelism" must return positive integers')
 
-                if job is None:
-                    break
+        return count < parallelism
 
-                # Do we need to increment counters?
-                if handling_group_parallelism:
-                    current_group = getgroup(job)
+    def can_work(self, job: Job):
+        with self.lock:
+            return self.__can_work(job)
 
-                    # Is current group full?
-                    if worked_groups[current_group] >= group_parallelism:
-                        buffer = buffers[current_group]
+    def __find_suitable_job(self):
+        for job in self.items.values():
+            if self.__can_work(job):
+                return job
 
-                        if not buffer.full():
-                            buffer.put_nowait(job)
+        return None
 
-                            job = None
-                            continue
+    def put(self, job: Job):
+        with self.lock:
+            assert not self.__full()
 
-                        waiter = Event()
-                        waiters[current_group].append(waiter)
+            self.items[id(job)] = job
 
-                        enqueue_lock.release()
+    def get(self):
+        while True:
+            self.lock.acquire()
 
-                        waiter.wait()
-                        buffer.put(job, timeout=FOREVER)
+            if len(self.items) == 0:
+                self.lock.release()
+                return None
 
-                        # Here we re-acquire the lock and simulate recursion
-                        enqueue_lock.acquire()
-                        recurse = True
-                        job = None
-                    break
-                else:
-                    break
+            job = self.__find_suitable_job()
 
-        # If we don't have any job left, we count towards the end
-        if job is None:
+            if job is not None:
+                del self.items[id(job)]
+                self.lock.release()
+                return job
 
-            # Releasing the lock
-            enqueue_lock.release()
+            if self.__full():
+                self.lock.release()
 
-            finished_counter += 1
+                with self.condition:
+                    self.condition.wait()
 
-            # All threads ended? Let's signal the output queue
-            if finished_counter >= threads:
+                # Simulating recursion
+                continue
 
-                # NOTE: should this be a put_nowait?
-                output_queue.put((None, THE_END_IS_NIGH), timeout=FOREVER)
+            self.lock.release()
+            return None
 
-            return THE_END_IS_NIGH
+        raise RuntimeError
 
-        # We do have another job to do, let's signal the input queue
-        else:
-            if handling_group_parallelism:
-                worked_groups[current_group] += 1
+    def register_job(self, job: Job):
+        with self.lock:
+            group = job.group
 
-            # Releasing the lock
-            enqueue_lock.release()
-
-            input_queue.put((current_group, job), timeout=FOREVER)
-
-    def release_throttled(g):
-        with timer_condition:
-            timers[g] = THE_WAIT_IS_OVER
-            timer_condition.notify_all()
-
-    def worker():
-        """
-        Function consuming the input queue, performing the task with the
-        consumed job and piping the result into the output queue.
-        """
-        nonlocal last_index
-
-        while not termination_event.is_set():
-            g, job = input_queue.get(timeout=FOREVER)
-
-            if job is THE_END_IS_NIGH:
-                break
-
-            index, data = job
-
-            # Need to throttle?
-            already_throttled = False
-
-            if throttling:
-
-                # NOTE: we could also use deque of waiters to be more efficient?
-                with timer_condition:
-                    while g in timers and timers[g] is not THE_WAIT_IS_OVER:
-                        timer_condition.wait()
-
-                    already_throttled = True
-                    timers[g] = True
-
-            # Recording time
-            # NOTE: we record before & after to prevent multiple threads
-            # to work at once on the same group
-            if throttling and not already_throttled:
-                with timer_condition:
-                    timers[g] = True
-
-            # Emitting
-            emit('start', data)
-
-            # Recording time and releasing throttled threads
-            if throttling:
-                with timer_condition:
-
-                    throttle_time = (
-                        (group_throttle(g, data) or 0)
-                        if callable(group_throttle)
-                        else group_throttle
-                    )
-
-                    assert isinstance(throttle_time, (int, float))
-
-                    timer = None
-
-                    if throttle_time != 0:
-                        # NOTE: we could improve the precision of the timer if needed
-                        timer = Timer(throttle_time, release_throttled, args=(g, ))
-                        timers[g] = timer
-
-                if timer is not None:
-                    timer.start()
-                else:
-                    release_throttled(g)
-
-            # Performing actual work
-            try:
-                result = func(data)
-            except BaseException:
-                return output_queue.put_nowait(
-                    (EVERYTHING_MUST_BURN, sys.exc_info())
-                )
-
-            if ordered:
-                with last_index_condition:
-
-                    while last_index != index - 1:
-                        last_index_condition.wait()
-
-                    last_index = index
-                    last_index_condition.notify_all()
-
-            # Piping into output queue
-            output_queue.put((None, result), timeout=FOREVER)
-            input_queue.task_done()
-
-            # Enqueuing next
-            status = enqueue(g)
-
-            if status is THE_END_IS_NIGH:
+            # None group does not count
+            if group is None:
                 return
 
-    def boot():
-        """
-        Function used to boot the workflow. It is called asynchronously to
-        avoid blocking issues preventing from returning the iterator first.
-        """
-        for _ in range(threads):
-            enqueue()
+            if group not in self.worked_groups:
+                self.worked_groups[group] = 1
+            else:
+                self.worked_groups[group] += 1
 
-    def cleanup():
-        """
-        Function that should be called to correctly cleanup threads, timers
-        and other resources.
-        """
-        termination_event.set()
+    def unregister_job(self, job: Job):
+        with self.lock:
+            group = job.group
 
-        for t in pool:
+            # None group does not count
+            if group is None:
+                return
+
+            assert group in self.worked_groups
+
+            if self.worked_groups[group] == 1:
+                del self.worked_groups[group]
+            else:
+                self.worked_groups[group] -= 1
+
+            if job.throttling != 0:
+                assert group not in self.throttled_groups
+
+                self.throttled_groups[group] = time.time() + job.throttling
+                self.__spawn_timer(job.throttling)
+
+        with self.condition:
+            self.condition.notify_all()
+
+    def __spawn_timer(self, throttling):
+        if self.throttle_timer is not None:
+            if throttling < self.throttle_timer.remaining():
+                self.throttle_timer.cancel()
+            else:
+                return
+
+        timer = SmartTimer(
+            throttling,
+            self.timer_callback
+        )
+
+        self.throttle_timer = timer
+        timer.start()
+
+    def timer_callback(self):
+        try:
+            with self.lock:
+                self.throttle_timer = None
+                assert len(self.throttled_groups) != 0
+
+                groups_to_release = []
+                earliest_next_time = None
+                current_time = time.time()
+
+                for group, release_time in self.throttled_groups.items():
+                    if current_time >= release_time:
+                        groups_to_release.append(group)
+                    else:
+                        if earliest_next_time is None or release_time < earliest_next_time:
+                            earliest_next_time = release_time
+
+                assert len(groups_to_release) > 0
+
+                # Actually releasing the groups
+                for group in groups_to_release:
+                    del self.throttled_groups[group]
+
+                # Relaunching timer?
+                if earliest_next_time is not None:
+                    throttling = earliest_next_time - current_time
+                    self.__spawn_timer(throttling)
+
+            # Notifying waiters
+            with self.condition:
+                self.condition.notify_all()
+
+        except BaseException as e:
+            smash(self.output_queue, e)
+
+    def teardown(self):
+        if self.throttle_timer is not None:
+            self.throttle_timer.cancel()
+
+        self.throttled_groups = {}
+        self.throttle_timer = None
+
+
+class OrderedOutputBuffer(object):
+    """
+    Class in charge of yielding values in the same order as they were extracted
+    from the iterated stream.
+
+    Note that this requires to buffer values into memory until the next valid
+    item has been processed by a worker thread.
+    """
+
+    def __init__(self):
+        self.last_index = 0
+        self.items = {}
+
+    def is_clean(self):
+        """
+        This function is only used after an imap is over to ensure no
+        dangling resource could be found.
+        """
+        return len(self.items) == 0
+
+    def flush(self):
+        while self.last_index in self.items:
+            yield self.items.pop(self.last_index).result
+            self.last_index += 1
+
+    def output(self, job):
+        if job.index == self.last_index:
+            self.last_index += 1
+            yield job.result
+            yield from self.flush()
+        else:
+            self.items[job.index] = job
+
+
+class OutputContext(object):
+    """
+    Context used by an executor imap output generator to ensure we don't forget
+    to cleanup when everything has been processed or when an error was raised.
+    """
+
+    def __init__(self, cleanup):
+        self.cleanup = cleanup
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, *args):
+        self.cleanup(normal_exit=exc_type is None)
+
+        if isinstance(exc_type, GeneratorExit):
+            return True
+
+
+def validate_max_workers(name, max_workers=None):
+    if max_workers is None:
+        return
+
+    if not isinstance(max_workers, int) or max_workers < 1:
+        raise TypeError('"%s" should be an integer > 0' % name)
+
+
+def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffer_size,
+                         throttle):
+
+    if not isinstance(iterable, Iterable) and not is_queue(iterable):
+        raise TypeError('target is not iterable nor a queue')
+
+    if not callable(func):
+        raise TypeError('worker function is not callable')
+
+    if key is not None and not callable(key):
+        raise TypeError('"key" is not callable')
+
+    if not isinstance(parallelism, (int, float)) and not callable(parallelism):
+        raise TypeError('"parallelism" is not a number nor callable')
+
+    if isinstance(parallelism, int) and parallelism < 0:
+        raise TypeError('"parallelism" is not a positive integer')
+
+    # if parallelism > max_workers:
+    #     raise TypeError('"parallelism" cannot be greater than the number of workers')
+
+    if not isinstance(buffer_size, int) or buffer_size < 1:
+        raise TypeError('"buffer_size" is not an integer > 0')
+
+    if not isinstance(throttle, (int, float)) and not callable(throttle):
+        raise TypeError('"throttle" is not a number nor callable')
+
+    if isinstance(throttle, (int, float)) and throttle < 0:
+        raise TypeError('"throttle" cannot be negative')
+
+
+class ThreadPoolExecutor(object):
+    """
+    Quenouille custom ThreadPoolExecutor able to lazily pull items to process
+    from iterated streams, all while bounding used memory and respecting
+    group parallelism and throttling.
+
+    Args:
+        max_workers (int, optional): Number of threads to use.
+            Defaults to min(32, os.cpu_count() + 1).
+    """
+
+    def __init__(self, max_workers=None):
+        validate_max_workers('max_workers', max_workers)
+
+        if max_workers is None:
+            max_workers = get_default_maxworkers()
+
+        self.max_workers = max_workers
+        self.job_queue = Queue(maxsize=max_workers)
+        self.output_queue = None
+        self.teardown_event = Event()
+        self.teardown_lock = Lock()
+        self.imap_lock = Lock()
+        self.closed = False
+
+        self.threads = [
+            Thread(
+                name='Thread-quenouille-%i-%i' % (id(self), n),
+                target=self.__worker,
+                daemon=True
+            )
+            for n in range(max_workers)
+        ]
+
+        for thread in self.threads:
+            thread.start()
+
+    def __enter__(self):
+        if self.closed:
+            raise RuntimeError('cannot re-enter a closed executor')
+
+        return self
+
+    def __exit__(self, *args):
+        self.__teardown()
+
+    def __teardown(self):
+        if self.closed:
+            return
+
+        with self.teardown_lock:
+            self.teardown_event.set()
+
+            # Killing workers (cancel jobs and flushing end messages)
+            self.__kill_workers()
+
+            # Clearing the ouput queue since we won't be iterating anymore
+            self.__clear_output_queue()
+
+            # Waiting for worker threads to end
+            for thread in self.threads:
+                thread.join()
+
+            self.closed = True
+
+    def __clear_output_queue(self):
+        if self.output_queue:
+            clear(self.output_queue)
+
+    def __cancel_all_jobs(self):
+        clear(self.job_queue)
+
+    def __kill_workers(self):
+        self.__cancel_all_jobs()
+        flush(self.job_queue, self.max_workers, THE_END_IS_NIGH)
+
+    def __worker(self):
+        try:
+            while not self.teardown_event.is_set():
+                job = get(self.job_queue)
+
+                # Signaling we must tear down the worker thread
+                if job is THE_END_IS_NIGH:
+                    self.job_queue.task_done()
+                    break
+
+                job()
+                self.job_queue.task_done()
+                put(self.output_queue, job)
+
+        except BaseException as e:
+            smash(self.output_queue, e)
+
+    def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
+               buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+
+        # Cannot run in multiple threads
+        if self.imap_lock.locked():
+            raise RuntimeError('cannot run multiple executor methods concurrently from different threads')
+
+        # Cannot run if already closed
+        if self.closed:
+            raise RuntimeError('cannot use thread pool after teardown')
+
+        self.imap_lock.acquire()
+
+        iterator = None
+        iterable_is_queue = is_queue(iterable)
+
+        if not iterable_is_queue:
+            iterator = ThreadSafeIterator(iterable)
+
+        self.output_queue = Queue()
+
+        # State
+        job_counter = count()
+        end_event = Event()
+        state = IterationState()
+        buffer = Buffer(self.output_queue, maxsize=buffer_size, parallelism=parallelism)
+        ordered_output_buffer = OrderedOutputBuffer()
+
+        def enqueue():
             try:
-                input_queue.put_nowait((None, THE_END_IS_NIGH))
-            except Full:
-                break
+                while not end_event.is_set():
 
-        # Threads must be join AFTER having sent the signal
-        for t in pool:
-            t.join()
+                    # First we check to see if there is a suitable buffered job
+                    job = buffer.get()
 
-        if throttling:
-            for timer in timers.items():
-                if isinstance(timer, Timer):
-                    timer.cancel()
+                    if job is None:
 
-    def output():
+                        # Else we consume the iterator to find one
+                        try:
+                            if not iterable_is_queue:
+                                item = next(iterator)
+                            else:
+                                try:
+                                    item = iterable.get_nowait()
+                                except Empty:
+                                    if state.has_running_tasks():
+                                        state.wait_for_any_task_to_finish()
+                                        continue
+                                    else:
+                                        raise StopIteration
+                        except StopIteration:
+                            if not buffer.empty():
+                                continue
+
+                            should_stop = state.declare_end()
+
+                            # Sometimes the end of the iterator lags behind
+                            # the output generator
+                            if should_stop:
+                                self.output_queue.put_nowait(THE_END_IS_NIGH)
+
+                            break
+
+                        group = None
+
+                        if key is not None:
+                            group = key(item)
+
+                        throttling = throttle
+
+                        if callable(throttle):
+                            throttling = throttle(group, item)
+
+                            if throttling is None:
+                                throttling = 0
+
+                            if not isinstance(throttling, (int, float)) or throttling < 0:
+                                raise TypeError('callable "throttle" must return numbers >= 0')
+
+                        job = Job(
+                            func,
+                            args=(item,),
+                            index=next(job_counter),
+                            group=group,
+                            throttling=throttling
+                        )
+
+                        buffer.put(job)
+                        continue
+
+                    # Registering the job
+                    buffer.register_job(job)
+                    state.start_task()
+                    put(self.job_queue, job)
+
+            except BaseException as e:
+                smash(self.output_queue, e)
+
+        def cleanup(normal_exit=True):
+            end_event.set()
+
+            # Clearing the job queue to cancel next jobs
+            self.__cancel_all_jobs()
+
+            # Clearing the ouput queue since we won't be iterating anymore
+            self.__clear_output_queue()
+
+            # Cleanup buffer to remove dangling timers
+            buffer.teardown()
+
+            # Sanity tests
+            if normal_exit:
+                assert buffer.is_clean()
+                assert ordered_output_buffer.is_clean()
+
+            # Making sure we are getting rid of the dispatcher thread
+            dispatcher.join()
+
+            self.imap_lock.release()
+
+        def output():
+            yield_lock = Lock()  # NOTE: I am not sure this lock is necessary
+
+            with OutputContext(cleanup):
+                while not state.should_stop() and not end_event.is_set():
+                    job = get(self.output_queue)
+
+                    if job is THE_END_IS_NIGH:
+                        break
+
+                    # Catching keyboard interrupts and other unrecoverable errors
+                    if isinstance(job, BaseException):
+                        raise job
+
+                    # Releasing task in output queue
+                    self.output_queue.task_done()
+
+                    # Unregistering job in buffer to let other threads continue working
+                    buffer.unregister_job(job)
+
+                    # Raising an error that occurred within worker function
+                    # NOTE: shenanigans with tracebacks don't seem to change anything
+                    if job.exc_info is not None:
+                        raise job.exc_info[1].with_traceback(job.exc_info[2])
+
+                    # Actually yielding the value to main thread
+                    with yield_lock:
+                        if ordered:
+                            yield from ordered_output_buffer.output(job)
+                        else:
+                            yield job.result
+
+                    # Acknowledging the job was finished
+                    # NOTE: this was moved after yielding items so that the
+                    # generator body may enqueue new jobs. It is possible that
+                    # this has a slight perf hit if the body performs heavy work?
+                    state.finish_task()
+
+        dispatcher = Thread(
+            name='Thread-quenouille-%i-dispatcher' % id(self),
+            target=enqueue,
+            daemon=True
+        )
+        dispatcher.start()
+
+        return output()
+
+    def imap_unordered(self, iterable, func, *, key=None, parallelism=1,
+                       buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+
+        validate_imap_kwargs(
+            iterable=iterable,
+            func=func,
+            max_workers=self.max_workers,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size,
+            throttle=throttle
+        )
+
+        return self.__imap(
+            iterable,
+            func,
+            ordered=False,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size,
+            throttle=throttle
+        )
+
+    def imap(self, iterable, func, *, key=None, parallelism=1,
+             buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+
+        validate_imap_kwargs(
+            iterable=iterable,
+            func=func,
+            max_workers=self.max_workers,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size,
+            throttle=throttle
+        )
+
+        return self.__imap(
+            iterable,
+            func,
+            ordered=True,
+            key=key,
+            parallelism=parallelism,
+            buffer_size=buffer_size,
+            throttle=throttle
+        )
+
+
+def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
+                   buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+
+    validate_max_workers('threads', threads)
+    validate_imap_kwargs(
+        iterable=iterable,
+        func=func,
+        max_workers=threads,
+        key=key,
+        parallelism=parallelism,
+        buffer_size=buffer_size,
+        throttle=throttle
+    )
+
+    if isinstance(iterable, Sized):
+        threads = min(
+            len(iterable),
+            threads or float('inf')
+        )
+
+    def generator():
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            yield from executor.imap_unordered(
+                iterable,
+                func,
+                key=key,
+                parallelism=parallelism,
+                buffer_size=buffer_size,
+                throttle=throttle
+            )
+
+    return generator()
+
+
+def imap(iterable, func, threads=None, *, key=None, parallelism=1,
+         buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+
+    validate_max_workers('threads', threads)
+    validate_imap_kwargs(
+        iterable=iterable,
+        func=func,
+        max_workers=threads,
+        key=key,
+        parallelism=parallelism,
+        buffer_size=buffer_size,
+        throttle=throttle
+    )
+
+    if isinstance(iterable, Sized):
+        threads = min(
+            len(iterable),
+            threads or float('inf')
+        )
+
+    def generator():
+        with ThreadPoolExecutor(max_workers=threads) as executor:
+            yield from executor.imap(
+                iterable,
+                func,
+                key=key,
+                parallelism=parallelism,
+                buffer_size=buffer_size,
+                throttle=throttle
+            )
+
+    return generator()
+
+
+def generate_function_doc(ordered=False):
+    disclaimer = 'Note that results will be yielded in an arbitrary order.'
+
+    if ordered:
+        disclaimer = 'Note that results will be yielded in same order as the input.'
+
+    return (
         """
-        Output generator function returned to provide an iterator to the
-        user.
+        Function consuming tasks from any iterable, dispatching them to a pool
+        of worker threads to finally yield the produced results.
+
+        {disclaimer}
+
+        Args:
+            iterable (iterable or queue): iterable of items to process or queue of
+                items to process.
+            func (callable): The task to perform with each item.
+            threads (int, optional): Number of threads to use.
+                Defaults to min(32, os.cpu_count() + 1).
+            key (callable, optional): Function returning to which "group" a given
+                item is supposed to belong. This will be used to ensure maximum
+                group parallelism is respected.
+            parallelism (int or callable, optional): Number of threads allowed to work
+                on a same group at once. Can also be a function taking a group and
+                returning its parallelism. Defaults to 1.
+            buffer_size (int, optional): Max number of items the function will
+                buffer into memory while attempting to find an item that can be
+                passed to a worker immediately, while respecting throttling and
+                group parallelism. Defaults to 1024.
+            throttle (float or callable, optional): Optional throttle time, in
+                seconds, to wait before processing the next item of a given group.
+                Can also be a function taking the current item with its group and
+                returning the next throttle time.
+
+        Yields:
+            any: Will yield results based on given worker function.
+
         """
-        boot()
-
-        while True:
-            error, result = output_queue.get(timeout=FOREVER)
-
-            # An exception was thrown!
-            if error is EVERYTHING_MUST_BURN:
-
-                # Cleanup
-                cleanup()
-
-                _, e, trace = result
-
-                raise e.with_traceback(trace)
-
-            # The end is nigh!
-            if result is THE_END_IS_NIGH:
-
-                # Cleanup
-                cleanup()
-                break
-
-            # NOTE: not completely sure this lock is needed.
-            # Better safe than sorry...
-            with yield_lock:
-                yield result
-
-    # Starting the threads
-    pool = [Thread(target=worker, daemon=True) for _ in range(threads)]
-
-    for thread in pool:
-        thread.start()
-
-    return output()
+    ).format(disclaimer=disclaimer)
 
 
-# Exporting specialized variants
-# -----------------------------------------------------------------------------
-
-# NOTE: not using `functool.partial/.update_wrapper` because if does not work
-# with the built-in `help` function so well. I am also not using `*args` and
-# `**kwargs` to make it easy on tooling...
-def imap(iterable, func, threads, ordered=True, group_parallelism=INFINITY,
-         group=None, group_buffer_size=1, group_throttle=0, listener=None):
-
-    return generic_imap(
-        iterable, func, threads, ordered=ordered,
-        group_parallelism=group_parallelism, group=group,
-        group_buffer_size=group_buffer_size,
-        group_throttle=group_throttle,
-        listener=listener)
-
-
-def imap_unordered(iterable, func, threads, ordered=False, group_parallelism=INFINITY,
-                   group=None, group_buffer_size=1, group_throttle=0, listener=None):
-
-    return generic_imap(
-        iterable, func, threads, ordered=ordered,
-        group_parallelism=group_parallelism, group=group,
-        group_buffer_size=group_buffer_size,
-        group_throttle=group_throttle,
-        listener=listener)
-
-
-imap.__doc__ = generic_imap.__doc__
-imap_unordered.__doc__ = generic_imap.__doc__
-
-__all__ = ['imap', 'imap_unordered']
+imap_unordered.__doc__ = generate_function_doc()
+imap.__doc__ = generate_function_doc(ordered=True)

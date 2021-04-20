@@ -11,8 +11,7 @@ def crasher(i):
         raise Exception('Die!')
     return i
 
-try:
-    for result in imap_unordered(range(15), crasher, 3):
-        print(result)
-except Exception as e:
-    print(type(e))
+
+for result in imap_unordered(range(15), crasher, 3):
+    print(result)
+

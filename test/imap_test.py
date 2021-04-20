@@ -4,9 +4,12 @@
 import time
 import pytest
 import threading
+from queue import Queue
 from collections import defaultdict
 from operator import itemgetter
-from quenouille import imap, imap_unordered
+
+from quenouille import imap_unordered, imap, ThreadPoolExecutor
+from quenouille.utils import put
 
 DATA = [
     ('A', 0.3, 0),
@@ -22,6 +25,19 @@ DATA = [
 ]
 
 
+def identity(x):
+    return x
+
+
+def queue_from(iterable, maxsize=0):
+    q = Queue(maxsize=maxsize)
+
+    for i in iterable:
+        q.put(i)
+
+    return q
+
+
 def sleeper(job):
     time.sleep(job[1] / 10)
     return job
@@ -34,24 +50,48 @@ def enumerated_sleeper(job):
 
 class TestImap(object):
     def test_arguments(self):
+        with pytest.raises(TypeError):
+            imap_unordered(None, sleeper, 4)
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, 'test', 4)
 
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 'test')
 
         with pytest.raises(TypeError):
-            imap_unordered(DATA, 45, 'test')
+            imap_unordered(DATA, sleeper, 4, key='test')
 
         with pytest.raises(TypeError):
-            imap_unordered(DATA, sleeper, 3, group_parallelism=1, group=None)
+            imap_unordered(DATA, sleeper, 4, parallelism=-1, key=itemgetter(0))
 
         with pytest.raises(TypeError):
-            imap_unordered(DATA, sleeper, 3, listener=4)
+            imap_unordered(DATA, sleeper, 4, parallelism=1, key=itemgetter(0), buffer_size='test')
 
         with pytest.raises(TypeError):
-            imap_unordered(DATA, sleeper, 3, group_buffer_size=-45)
+            imap_unordered(DATA, sleeper, 4, parallelism=1, buffer_size=0)
+
+        # with pytest.raises(TypeError):
+        #     imap_unordered(DATA, sleeper, 2, parallelism=4, key=itemgetter(0))
 
         with pytest.raises(TypeError):
-            imap_unordered(DATA, sleeper, 3, group_throttle=-46)
+            imap_unordered(DATA, sleeper, 2, key=itemgetter(0), throttle='test')
+
+        with pytest.raises(TypeError):
+            imap_unordered(DATA, sleeper, 2, key=itemgetter(0), throttle=-4)
+
+        with pytest.raises(RuntimeError):
+            with ThreadPoolExecutor(4) as executor:
+                pass
+
+            executor.imap(DATA, sleeper)
+
+        with pytest.raises(RuntimeError):
+            with ThreadPoolExecutor(4) as executor:
+                def work(item):
+                    executor.imap_unordered(DATA, sleeper)
+
+                list(executor.imap(DATA, work))
 
     def test_basics(self):
 
@@ -60,13 +100,24 @@ class TestImap(object):
         assert len(results) == len(DATA)
         assert set(results) == set(DATA)
 
+    def test_none_iterator(self):
+        iterable = [None] * 3
+
+        results = list(imap_unordered(iterable, identity, 2))
+        assert results == iterable
+
     def test_less_jobs_than_threads(self):
 
         results = list(imap_unordered(DATA[:2], sleeper, 2))
 
         assert set(results) == set([('A', 0.2, 1), ('A', 0.3, 0)])
 
-    def test_one(self):
+    def test_one_thread(self):
+        results = list(imap(DATA, sleeper, 1))
+
+        assert results == DATA
+
+    def test_one_item(self):
         results = list(imap_unordered(DATA[:1], sleeper, 2))
 
         assert results == [('A', 0.3, 0)]
@@ -85,41 +136,27 @@ class TestImap(object):
     def test_group_parallelism(self):
 
         # Unordered
-        results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0)))
-
+        results = list(imap_unordered(DATA, sleeper, 2, parallelism=1, key=itemgetter(0)))
         assert set(results) == set(DATA)
 
-        results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3))
-
+        results = list(imap_unordered(DATA, sleeper, 2, parallelism=1, key=itemgetter(0), buffer_size=3))
         assert set(results) == set(DATA)
 
-        results = list(imap_unordered(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
+        results = list(imap_unordered(DATA, sleeper, 2, parallelism=1, key=itemgetter(0), buffer_size=1))
+        assert set(results) == set(DATA)
 
+        results = list(imap_unordered(DATA, sleeper, 4, parallelism=3, key=itemgetter(0), buffer_size=3))
         assert set(results) == set(DATA)
 
         # Ordered
-        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0)))
+        results = list(imap(DATA, sleeper, 2, parallelism=1, key=itemgetter(0)))
+        assert results == DATA
 
-        assert set(results) == set(DATA)
+        results = list(imap(DATA, sleeper, 2, parallelism=1, key=itemgetter(0), buffer_size=3))
+        assert results == DATA
 
-        results = list(imap(DATA, sleeper, 2, group_parallelism=1, group=itemgetter(0), group_buffer_size=3))
-
-        assert set(results) == set(DATA)
-
-        results = list(imap(DATA, sleeper, 2, group_parallelism=3, group=itemgetter(0), group_buffer_size=3))
-
-        assert set(results) == set(DATA)
-
-    def test_listener(self):
-        events = defaultdict(list)
-
-        listener = lambda event, job: events[event].append(job)
-
-        list(imap_unordered(DATA, sleeper, 5, listener=listener))
-
-        assert set(events.keys()) == {'start'}
-
-        assert set(events['start']) == set(DATA)
+        results = list(imap(DATA, sleeper, 4, parallelism=3, key=itemgetter(0), buffer_size=3))
+        assert results == DATA
 
     def test_break(self):
 
@@ -136,23 +173,119 @@ class TestImap(object):
 
         group = lambda x: 'SAME'
 
-        nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=0.1))
-
+        nbs = set(imap_unordered(range(10), identity, 10, key=group, throttle=0.01))
         assert nbs == set(range(10))
 
-    def test_function_throttle(self):
+        nbs = set(imap_unordered(range(10), identity, 10, key=group, throttle=0.01, buffer_size=1))
+        assert nbs == set(range(10))
+
+        nbs = set(imap_unordered(range(10), identity, 10, key=group, throttle=0.01, buffer_size=3))
+        assert nbs == set(range(10))
+
+        nbs = list(imap(range(10), identity, 10, key=group, throttle=0.01))
+        assert nbs == list(range(10))
+
+        nbs = list(imap(range(10), identity, 10, key=group, throttle=0.01, buffer_size=1))
+        assert nbs == list(range(10))
+
+        nbs = list(imap(range(10), identity, 10, key=group, throttle=0.01, buffer_size=3))
+        assert nbs == list(range(10))
+
+        results = list(imap_unordered(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
+        assert set(results) == set(DATA)
+
+        results = list(imap(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
+        assert results == DATA
+
+    def test_callable_throttle(self):
 
         def throttling(group, nb):
             if group == 'odd':
-                return None
+                return 0
 
             return 0.1
 
         group = lambda x: 'even' if x % 2 == 0 else 'odd'
 
-        nbs = set(imap(range(10), lambda x: x, 10, group=group, group_throttle=throttling))
+        nbs = set(imap(range(10), identity, 10, key=group, throttle=throttling))
 
         assert nbs == set(range(10))
+
+        def hellraiser(g, i):
+            if i > 2:
+                raise TypeError
+
+            return 0.01
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 4, throttle=hellraiser))
+
+        def wrong_type(g, i):
+            return 'test'
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 2, throttle=wrong_type))
+
+        def negative(g, i):
+            return -30
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 2, throttle=negative))
+
+    def test_callable_parallelism(self):
+        def per_group(g):
+            if g == 'B':
+                return 3
+            else:
+                return 1
+
+        result = list(imap(DATA, identity, 4, parallelism=per_group, key=itemgetter(0)))
+        assert result == DATA
+
+        def per_group_with_special(g):
+            if g == 'B':
+                return None
+
+            return 1
+
+        result = list(imap(DATA, identity, 4, parallelism=per_group, key=itemgetter(0)))
+        assert result == DATA
+
+        def per_group_raising(g):
+            if g == 'B':
+                raise RuntimeError
+
+            return 1
+
+        with pytest.raises(RuntimeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_raising, key=itemgetter(0)))
+
+        def per_group_invalid(g):
+            if g == 'B':
+                return 'test'
+
+            return 1
+
+        with pytest.raises(TypeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_invalid, key=itemgetter(0)))
+
+        def per_group_zero(g):
+            if g == 'B':
+                return 0
+
+            return 1
+
+        with pytest.raises(TypeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_zero, key=itemgetter(0)))
+
+        def per_group_negative(g):
+            if g == 'B':
+                return -3
+
+            return 1
+
+        with pytest.raises(TypeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_negative, key=itemgetter(0)))
 
     def test_raise(self):
         def hellraiser(i):
@@ -168,3 +301,103 @@ class TestImap(object):
         with pytest.raises(RuntimeError):
             for i in imap(range(6, 15), hellraiser, 4):
                 pass
+
+    def test_key_raise(self):
+        def group(i):
+            if i > 2:
+                raise RuntimeError
+
+            return 'SAME'
+
+        with pytest.raises(RuntimeError):
+            list(imap_unordered(range(5), identity, 2, key=group))
+
+    def test_executor(self):
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            result = list(executor.imap(DATA, sleeper))
+            assert result == DATA
+
+            result = set(executor.imap_unordered(DATA, sleeper))
+            assert result == set(DATA)
+
+    def test_blocking_iterator(self):
+        def sleeping():
+            for i in range(5):
+                yield i
+                time.sleep(0.01)
+
+        def blocking():
+            condition = threading.Condition()
+
+            def release():
+                with condition:
+                    condition.notify_all()
+
+            for i in range(5):
+                yield i
+                timer = threading.Timer(0.01, release)
+                timer.start()
+                with condition:
+                    condition.wait()
+
+        result = list(imap(sleeping(), identity, 4))
+        assert result == list(range(5))
+
+        result = list(imap(blocking(), identity, 4))
+        assert result == list(range(5))
+
+    def test_queue(self):
+        q = queue_from([1])
+
+        def worker(i):
+            if i == 1:
+                put(q, 2)
+                put(q, 3)
+                put(q, 4)
+
+            if i == 3:
+                put(q, 4)
+
+            time.sleep(0.01)
+
+            if i == 4:
+                put(q, 5)
+
+            return i
+
+        result = list(imap(q, worker, 2))
+        assert q.empty()
+        assert result == [1, 2, 3, 4, 4, 5, 5]
+
+        q = queue_from([1])
+        result = []
+
+        for i in imap(q, identity, 2):
+            result.append(i)
+
+            if i == 1:
+                put(q, 2)
+                put(q, 3)
+                put(q, 4)
+
+            if i == 3:
+                put(q, 4)
+
+            time.sleep(0.01)
+
+            if i == 4:
+                put(q, 5)
+
+        assert q.empty()
+        assert result == [1, 2, 3, 4, 4, 5, 5]
+
+        q = queue_from([])
+        result = list(imap(q, worker, 2))
+
+        assert q.empty()
+        assert result == []
+
+    def test_default_threads(self):
+        result = list(imap(DATA, identity))
+
+        assert result == DATA
