@@ -199,7 +199,9 @@ class TestImap(object):
 
     def test_callable_throttle(self):
 
-        def throttling(group, nb):
+        def throttling(group, nb, result):
+            assert nb == result
+
             if group == 'odd':
                 return 0
 
@@ -211,26 +213,26 @@ class TestImap(object):
 
         assert nbs == set(range(10))
 
-        def hellraiser(g, i):
+        def hellraiser(g, i, result):
             if i > 2:
                 raise TypeError
 
             return 0.01
 
         with pytest.raises(TypeError):
-            list(imap_unordered(range(5), identity, 4, throttle=hellraiser))
+            list(imap_unordered(range(5), identity, 4, key=group, throttle=hellraiser))
 
-        def wrong_type(g, i):
+        def wrong_type(g, i, result):
             return 'test'
 
         with pytest.raises(TypeError):
-            list(imap_unordered(range(5), identity, 2, throttle=wrong_type))
+            list(imap_unordered(range(5), identity, 2, key=group, throttle=wrong_type))
 
-        def negative(g, i):
+        def negative(g, i, result):
             return -30
 
         with pytest.raises(TypeError):
-            list(imap_unordered(range(5), identity, 2, throttle=negative))
+            list(imap_unordered(range(5), identity, 2, key=group, throttle=negative))
 
     def test_callable_parallelism(self):
         def per_group(g):

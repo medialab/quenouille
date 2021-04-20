@@ -34,21 +34,19 @@ class Job(object):
     Class representing a job to be performed by a worker thread.
     """
 
-    __slots__ = ('func', 'args', 'kwargs', 'index', 'group', 'result', 'exc_info', 'throttling')
+    __slots__ = ('func', 'item', 'index', 'group', 'result', 'exc_info')
 
-    def __init__(self, func, args, kwargs={}, index=None, group=None, throttling=0):
+    def __init__(self, func, item, index=None, group=None):
         self.func = func
-        self.args = args
-        self.kwargs = kwargs
+        self.item = item
         self.index = index
         self.group = group
         self.result = None
         self.exc_info = None
-        self.throttling = throttling
 
     def __call__(self):
         try:
-            self.result = self.func(*self.args, **self.kwargs)
+            self.result = self.func(self.item)
         except BaseException as e:
 
             # We catch the exception before flushing downstream to be
@@ -57,13 +55,12 @@ class Job(object):
             self.exc_info = sys.exc_info()
 
     def __repr__(self):
-        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}{throttling}>'.format(
+        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}>'.format(
             name=self.__class__.__name__,
             index=self.index,
             group=self.group,
             args=self.args,
-            id=id(self),
-            throttling=(' throttling={!r}'.format(self.throttling) if self.throttling else '')
+            id=id(self)
         )
 
 
@@ -134,12 +131,16 @@ class Buffer(object):
     Its #.put method will never block and should raise if putting the buffer
     into an incoherent state.
     """
-    def __init__(self, output_queue, maxsize=1, parallelism=1):
+    def __init__(self, output_queue, maxsize=1, parallelism=1, throttle=0):
 
         # Properties
         self.output_queue = output_queue
         self.maxsize = maxsize
         self.parallelism = parallelism
+        self.throttle = throttle
+
+        assert isinstance(self.parallelism, int) or callable(self.parallelism)
+        assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
 
         # Threading
         self.condition = Condition()
@@ -191,14 +192,10 @@ class Buffer(object):
         if job.group is None:
             return True
 
+        if job.group in self.throttled_groups:
+            return False
+
         count = self.worked_groups.get(job.group, 0)
-
-        if job.throttling != 0:
-            if count != 0:
-                return False
-
-            if job.group in self.throttled_groups:
-                return False
 
         parallelism = self.parallelism
 
@@ -213,10 +210,6 @@ class Buffer(object):
                 raise TypeError('callable "parallelism" must return positive integers')
 
         return count < parallelism
-
-    def can_work(self, job: Job):
-        with self.lock:
-            return self.__can_work(job)
 
     def __find_suitable_job(self):
         for job in self.items.values():
@@ -288,24 +281,39 @@ class Buffer(object):
             else:
                 self.worked_groups[group] -= 1
 
-            if job.throttling != 0:
+            throttle_time = self.throttle
+
+            if callable(self.throttle):
+                throttle_time = self.throttle(
+                    job.group,
+                    job.item,
+                    job.result
+                )
+
+                if throttle_time is None:
+                    throttle_time = 0
+
+                if not isinstance(throttle_time, (int, float)) or throttle_time < 0:
+                    raise TypeError('callable "throttle" must return numbers >= 0')
+
+            if throttle_time != 0:
                 assert group not in self.throttled_groups
 
-                self.throttled_groups[group] = time.time() + job.throttling
-                self.__spawn_timer(job.throttling)
+                self.throttled_groups[group] = time.time() + throttle_time
+                self.__spawn_timer(throttle_time)
 
         with self.condition:
             self.condition.notify_all()
 
-    def __spawn_timer(self, throttling):
+    def __spawn_timer(self, throttle_time):
         if self.throttle_timer is not None:
-            if throttling < self.throttle_timer.remaining():
+            if throttle_time < self.throttle_timer.remaining():
                 self.throttle_timer.cancel()
             else:
                 return
 
         timer = SmartTimer(
-            throttling,
+            throttle_time,
             self.timer_callback
         )
 
@@ -337,8 +345,8 @@ class Buffer(object):
 
                 # Relaunching timer?
                 if earliest_next_time is not None:
-                    throttling = earliest_next_time - current_time
-                    self.__spawn_timer(throttling)
+                    time_to_wait = earliest_next_time - current_time
+                    self.__spawn_timer(time_to_wait)
 
             # Notifying waiters
             with self.condition:
@@ -565,7 +573,12 @@ class ThreadPoolExecutor(object):
         job_counter = count()
         end_event = Event()
         state = IterationState()
-        buffer = Buffer(self.output_queue, maxsize=buffer_size, parallelism=parallelism)
+        buffer = Buffer(
+            self.output_queue,
+            maxsize=buffer_size,
+            parallelism=parallelism,
+            throttle=throttle
+        )
         ordered_output_buffer = OrderedOutputBuffer()
 
         def enqueue():
@@ -608,23 +621,11 @@ class ThreadPoolExecutor(object):
                         if key is not None:
                             group = key(item)
 
-                        throttling = throttle
-
-                        if callable(throttle):
-                            throttling = throttle(group, item)
-
-                            if throttling is None:
-                                throttling = 0
-
-                            if not isinstance(throttling, (int, float)) or throttling < 0:
-                                raise TypeError('callable "throttle" must return numbers >= 0')
-
                         job = Job(
                             func,
-                            args=(item,),
+                            item=item,
                             index=next(job_counter),
-                            group=group,
-                            throttling=throttling
+                            group=group
                         )
 
                         buffer.put(job)
@@ -853,8 +854,9 @@ def generate_function_doc(ordered=False):
                 group parallelism. Defaults to 1024.
             throttle (float or callable, optional): Optional throttle time, in
                 seconds, to wait before processing the next item of a given group.
-                Can also be a function taking the current item preceded by its group and
-                returning the next throttle time.
+                Can also be a function taking last group, item and returning next
+                throttle time for this group.
+
 
         Yields:
             any: Will yield results based on given worker function.

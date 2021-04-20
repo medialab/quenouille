@@ -62,7 +62,7 @@ with open(csv_path, 'r') as f:
     print(html)
 
   # Throttle time depending on domain
-  def throttle(group, item):
+  def throttle(group, item, result):
     if group == 'lemonde.fr':
       return 10
 
@@ -84,7 +84,7 @@ with open(csv_path, 'r') as f:
 * **key** *?callable*: Function returning to which "group" a given item is supposed to belong. This will be used to ensure maximum parallelism is respected.
 * **parallelism** *?int|callable* [`1`]: Number of threads allowed to work on a same group at once. Can also be a function taking a group and returning its parallelism.
 * **buffer_size** *?int* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find an item that can be passed to a worker immediately, all while respecting throttling and group parallelism.
-* **throttle** *?int|float|callable*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking the current item, preceded by its group and returning the next throttle time.
+* **throttle** *?int|float|callable*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking last group, item and result and returning next throttle time for this group.
 
 *Using a queue rather than an iterable*
 
