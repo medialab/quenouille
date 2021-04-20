@@ -60,8 +60,8 @@ class TestImap(object):
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 4, parallelism=1, buffer_size=0)
 
-        with pytest.raises(TypeError):
-            imap_unordered(DATA, sleeper, 2, parallelism=4, key=itemgetter(0))
+        # with pytest.raises(TypeError):
+        #     imap_unordered(DATA, sleeper, 2, parallelism=4, key=itemgetter(0))
 
         with pytest.raises(TypeError):
             imap_unordered(DATA, sleeper, 2, key=itemgetter(0), throttle='test')
@@ -180,7 +180,7 @@ class TestImap(object):
         results = list(imap(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
         assert results == DATA
 
-    def test_function_throttle(self):
+    def test_callable_throttle(self):
 
         def throttling(group, nb):
             if group == 'odd':
@@ -193,6 +193,73 @@ class TestImap(object):
         nbs = set(imap(range(10), identity, 10, key=group, throttle=throttling))
 
         assert nbs == set(range(10))
+
+        def hellraiser(g, i):
+            if i > 2:
+                raise TypeError
+
+            return 0.01
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 4, throttle=hellraiser))
+
+        def wrong_type(g, i):
+            return 'test'
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 2, throttle=wrong_type))
+
+        def negative(g, i):
+            return -30
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 2, throttle=negative))
+
+    def test_callable_parallelism(self):
+        def per_group(g):
+            if g == 'B':
+                return 3
+            else:
+                return 1
+
+        result = list(imap(DATA, identity, 4, parallelism=per_group, key=itemgetter(0)))
+        assert result == DATA
+
+        def per_group_raising(g):
+            if g == 'B':
+                raise RuntimeError
+
+            return 1
+
+        with pytest.raises(RuntimeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_raising, key=itemgetter(0)))
+
+        def per_group_invalid(g):
+            if g == 'B':
+                return 'test'
+
+            return 1
+
+        with pytest.raises(TypeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_invalid, key=itemgetter(0)))
+
+        def per_group_zero(g):
+            if g == 'B':
+                return 0
+
+            return 1
+
+        with pytest.raises(TypeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_zero, key=itemgetter(0)))
+
+        def per_group_negative(g):
+            if g == 'B':
+                return -3
+
+            return 1
+
+        with pytest.raises(TypeError):
+            result = list(imap(DATA, identity, 4, parallelism=per_group_negative, key=itemgetter(0)))
 
     def test_raise(self):
         def hellraiser(i):
@@ -208,22 +275,6 @@ class TestImap(object):
         with pytest.raises(RuntimeError):
             for i in imap(range(6, 15), hellraiser, 4):
                 pass
-
-    def test_raising_callable_throttle(self):
-        def hellraiser(g, i):
-            if i > 2:
-                raise TypeError
-
-            return 0.01
-
-        with pytest.raises(TypeError):
-            list(imap_unordered(range(5), identity, 4, throttle=hellraiser))
-
-        def wrong_type(g, i):
-            return 'test'
-
-        with pytest.raises(TypeError):
-            list(imap_unordered(range(5), identity, 2, throttle=wrong_type))
 
     def test_executor(self):
         with ThreadPoolExecutor(max_workers=4) as executor:

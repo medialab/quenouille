@@ -29,9 +29,10 @@ from quenouille.constants import (
 # TODO: fully document this complex code...
 # TODO: handle queues natively (process queue until drained, or closable queue?)
 # TODO: doc disclaimer about memory in the ordered case
-# TODO: callable parallelism
+# TODO: doc parallelism > workers
+# TODO: doc callable parallelism be sure to return same per domain, + not more than threads
 # TODO: doc None group is never throttled!
-# TODO: doc: what about parallelism > 1 and throttle > 0?
+# TODO: doc what about parallelism > 1 and throttle > 0?
 # TODO: args, kwargs callable from item
 
 
@@ -52,6 +53,10 @@ class Job(object):
         try:
             self.result = self.func(*self.args, **self.kwargs)
         except BaseException as e:
+
+            # We catch the exception before flushing downstream to be
+            # sure the job can be passed down the line but it might not be
+            # the best thing to do. Time will tell...
             self.exc_info = sys.exc_info()
 
     def __repr__(self):
@@ -164,7 +169,15 @@ class Buffer(object):
             if job.group in self.throttled_groups:
                 return False
 
-        return count < self.parallelism
+        parallelism = self.parallelism
+
+        if callable(self.parallelism):
+            parallelism = self.parallelism(job.group)
+
+            if not isinstance(parallelism, int) or parallelism < 1:
+                raise TypeError('callable "parallelism" must return positive integers')
+
+        return count < parallelism
 
     def can_work(self, job: Job):
         with self.lock:
@@ -360,17 +373,20 @@ def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffe
     if key is not None and not callable(key):
         raise TypeError('"key" is not callable')
 
-    if not isinstance(parallelism, int) or parallelism < 1:
-        raise TypeError('"parallelism" is not an integer > 0')
+    if not isinstance(parallelism, (int, float)) and not callable(parallelism):
+        raise TypeError('"parallelism" is not a number nor callable')
 
-    if parallelism > max_workers:
-        raise TypeError('"parallelism" cannot be greater than the number of workers')
+    if isinstance(parallelism, int) and parallelism < 0:
+        raise TypeError('"parallelism" is not a positive integer')
+
+    # if parallelism > max_workers:
+    #     raise TypeError('"parallelism" cannot be greater than the number of workers')
 
     if not isinstance(buffer_size, int) or buffer_size < 1:
         raise TypeError('"buffer_size" is not an integer > 0')
 
     if not isinstance(throttle, (int, float)) and not callable(throttle):
-        raise TypeError('"throttle" is not a number or callable')
+        raise TypeError('"throttle" is not a number nor callable')
 
     if isinstance(throttle, (int, float)) and throttle < 0:
         raise TypeError('"throttle" cannot be negative')
@@ -517,8 +533,8 @@ class ThreadPoolExecutor(object):
                             if throttling is None:
                                 throttling = 0
 
-                            if not isinstance(throttling, (int, float)):
-                                raise TypeError('callable "throttle" should return numbers')
+                            if not isinstance(throttling, (int, float)) or throttling < 0:
+                                raise TypeError('callable "throttle" must return numbers >= 0')
 
                         job = Job(
                             func,
