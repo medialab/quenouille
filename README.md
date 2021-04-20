@@ -22,7 +22,6 @@ pip install quenouille
 * [ThreadPoolExecutor](#threadpoolexecutor)
 * [Miscellaneous notes](#miscellaneous-notes)
   * [The None group](#the-none-group)
-  * [None parallelism](#none-parallelism)
   * [Parallelism > workers](#parallelism--workers)
   * [Callable parallelism guarantees](#callable-parallelism-guarantees)
   * [Parallelism vs. throttling](#parallelism-vs-throttling)
@@ -146,9 +145,7 @@ with ThreadPoolExecutor(max_workers=4) as executor:
 
 The `imap` functions consider the `None` group (this can happen if your `key` function returns `None`) as special and will always consider the attached items can be processed right away without parallelism constraints nor throttle.
 
-#### None parallelism
-
-`parallelism` can be callable and return `None` for some groups, meaning those won't be affected by parallelism constraints, e.g. any numbers of workers will be able to work on this group at once.
+Without `key`, all items are considered to belong to the `None` group.
 
 #### Parallelism > workers
 
