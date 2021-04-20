@@ -100,6 +100,12 @@ class TestImap(object):
         assert len(results) == len(DATA)
         assert set(results) == set(DATA)
 
+    def test_none_iterator(self):
+        iterable = [None] * 3
+
+        results = list(imap_unordered(iterable, identity, 2))
+        assert results == iterable
+
     def test_less_jobs_than_threads(self):
 
         results = list(imap_unordered(DATA[:2], sleeper, 2))
