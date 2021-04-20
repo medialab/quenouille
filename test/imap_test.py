@@ -29,6 +29,15 @@ def identity(x):
     return x
 
 
+def queue_from(iterable, maxsize=0):
+    q = Queue(maxsize=maxsize)
+
+    for i in iterable:
+        q.put(i)
+
+    return q
+
+
 def sleeper(job):
     time.sleep(job[1] / 10)
     return job
@@ -314,10 +323,10 @@ class TestImap(object):
 
     def test_queue(self):
         # TODO: try with maxsize
+        # TODO: test empty queue
         # TODO: also try with q.put into imap loop
         # TODO: when is task_done necessary
-        q = Queue()
-        q.put(1)
+        q = queue_from([1])
 
         def worker(i):
             if i == 1:
@@ -337,3 +346,26 @@ class TestImap(object):
 
         result = list(imap(q, worker, 2))
         assert result == [1, 2, 3, 4, 4, 5, 5]
+
+        # q = queue_from([1])
+        # result = []
+
+        # import threading
+
+        # for i in imap(q, identity, 2):
+        #     result.append(i)
+        #     print('unrelated')
+        #     if i == 1:
+        #         put(q, 2)
+        #         put(q, 3)
+        #         put(q, 4)
+
+        #     if i == 3:
+        #         put(q, 4)
+
+        #     time.sleep(0.01)
+
+        #     if i == 4:
+        #         put(q, 5)
+
+        # assert result == [1, 2, 3, 4, 4, 5, 5]
