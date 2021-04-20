@@ -9,7 +9,7 @@ import time
 from queue import Queue
 from threading import Thread, Event, Lock, Condition
 from collections import OrderedDict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sized
 from itertools import count
 
 from quenouille.utils import (
@@ -26,7 +26,6 @@ from quenouille.constants import (
     DEFAULT_BUFFER_SIZE
 )
 
-# TODO: clamp number of threads based on iterable size
 # TODO: fully document this complex code...
 # TODO: handle queues natively (process queue until drained, or closable queue?)
 # TODO: doc disclaimer about memory in the ordered case
@@ -576,6 +575,7 @@ class ThreadPoolExecutor(object):
                     state.finish_task()
 
                     # Raising an error that occurred within worker function
+                    # NOTE: shenanigans with tracebacks don't seem to change anything
                     if job.exc_info is not None:
                         raise job.exc_info[1].with_traceback(job.exc_info[2])
 
@@ -655,6 +655,9 @@ def imap_unordered(iterable, func, threads, *, key=None, parallelism=1,
         throttle=throttle
     )
 
+    if isinstance(iterable, Sized):
+        threads = min(len(iterable), threads)
+
     def generator():
         with ThreadPoolExecutor(max_workers=threads) as executor:
             yield from executor.imap_unordered(
@@ -682,6 +685,9 @@ def imap(iterable, func, threads, *, key=None, parallelism=1,
         buffer_size=buffer_size,
         throttle=throttle
     )
+
+    if isinstance(iterable, Sized):
+        threads = min(len(iterable), threads)
 
     def generator():
         with ThreadPoolExecutor(max_workers=threads) as executor:
