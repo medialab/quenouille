@@ -242,6 +242,15 @@ class TestImap(object):
         result = list(imap(DATA, identity, 4, parallelism=per_group, key=itemgetter(0)))
         assert result == DATA
 
+        def per_group_with_special(g):
+            if g == 'B':
+                return None
+
+            return 1
+
+        result = list(imap(DATA, identity, 4, parallelism=per_group, key=itemgetter(0)))
+        assert result == DATA
+
         def per_group_raising(g):
             if g == 'B':
                 raise RuntimeError

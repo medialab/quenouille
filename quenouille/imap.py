@@ -28,7 +28,6 @@ from quenouille.constants import (
     DEFAULT_BUFFER_SIZE
 )
 
-# TODO: fully document this complex code...
 # TODO: doc document the fact that blocking input queue in iterator loop is unwise + task_done on your own
 # TODO: doc the fact that it is better to enqueue from workers?
 # TODO: doc disclaimer about memory in the ordered case
@@ -38,7 +37,7 @@ from quenouille.constants import (
 # TODO: doc what about parallelism > 1 and throttle > 0?
 # TODO: doc or test footgun of queue with maxsize < max_workers (raise error if possible?)
 # TODO: doc queue until drain
-# TODO: parallelism callable returning None
+# TODO: doc parallelism callable returning None
 # TODO: doc throttle entropy
 
 
@@ -169,6 +168,10 @@ class Buffer(object):
             return len(self.items)
 
     def is_clean(self):
+        """
+        This function is only used after an imap is over to ensure no
+        dangling resource could be found.
+        """
         with self.lock:
             return (
                 len(self.items) == 0 and
@@ -213,6 +216,10 @@ class Buffer(object):
 
         if callable(self.parallelism):
             parallelism = self.parallelism(job.group)
+
+            # No parallelism for a group basically means it is not being constrained
+            if parallelism is None:
+                return True
 
             if not isinstance(parallelism, int) or parallelism < 1:
                 raise TypeError('callable "parallelism" must return positive integers')
@@ -374,6 +381,10 @@ class OrderedOutputBuffer(object):
         self.items = {}
 
     def is_clean(self):
+        """
+        This function is only used after an imap is over to ensure no
+        dangling resource could be found.
+        """
         return len(self.items) == 0
 
     def flush(self):
