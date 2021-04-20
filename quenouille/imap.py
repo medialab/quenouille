@@ -483,8 +483,7 @@ class ThreadPoolExecutor(object):
         self.threads = [
             Thread(
                 name='Thread-quenouille-%i-%i' % (id(self), n),
-                target=self.__worker,
-                daemon=True
+                target=self.__worker
             )
             for n in range(max_workers)
         ]
@@ -701,8 +700,7 @@ class ThreadPoolExecutor(object):
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
-            target=enqueue,
-            daemon=True
+            target=enqueue
         )
         dispatcher.start()
 
