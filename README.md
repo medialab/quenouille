@@ -21,6 +21,13 @@ pip install quenouille
 * [imap_unordered, imap](#imap_unordered-imap)
 * [ThreadPoolExecutor](#threadpoolexecutor)
 * [Miscellaneous notes](#miscellaneous-notes)
+  * [The None group](#the-none-group)
+  * [None parallelism](#none-parallelism)
+  * [Parallelism > workers](#parallelism--workers)
+  * [Callable parallelism guarantees](#callable-parallelism-guarantees)
+  * [Parallelism vs. throttling](#parallelism-vs-throttling)
+  * [Adding entropy to throttle](#adding-entropy-to-throttle)
+  * [Caveats of using imap with queues](#caveats-of-using-imap-with-queues)
 
 ### imap_unordered, imap
 
