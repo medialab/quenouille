@@ -12,10 +12,14 @@ from queue import Empty, Full
 from quenouille.constants import FOREVER
 
 
+# For ref: https://docs.python.org/3/library/queue.html#queue.Queue.get
+# The timeout=FOREVER part is probably obsolete now
 def get(q):
     return q.get(timeout=FOREVER)
 
 
+# For ref: https://docs.python.org/3/library/queue.html#queue.Queue.get
+# The timeout=FOREVER part is probably obsolete now
 def put(q, v):
     return q.put(v, timeout=FOREVER)
 
