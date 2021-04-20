@@ -29,6 +29,7 @@ from quenouille.constants import (
 
 # TODO: fully document this complex code...
 # TODO: doc document the fact that blocking input queue in iterator loop is unwise + task_done on your own
+# TODO: doc the fact that it is better to enqueue from workers?
 # TODO: doc disclaimer about memory in the ordered case
 # TODO: doc parallelism > workers
 # TODO: doc callable parallelism be sure to return same per domain, + not more than threads
