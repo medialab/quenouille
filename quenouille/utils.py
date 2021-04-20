@@ -58,7 +58,7 @@ def is_queue(v):
 
 # As per: https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
 def get_default_maxworkers():
-    return min(32, os.cpu_count() + 4)
+    return min(32, (os.cpu_count() or 1) + 4)
 
 
 class ThreadSafeIterator(object):
