@@ -4,6 +4,7 @@
 import time
 import pytest
 import threading
+from queue import Queue
 from collections import defaultdict
 from operator import itemgetter
 
@@ -309,3 +310,28 @@ class TestImap(object):
 
         result = list(imap(blocking(), identity, 4))
         assert result == list(range(5))
+
+    # def test_queue(self):
+    #     with ThreadPoolExecutor(2) as executor:
+    #         q = Queue()
+    #         q.put(1)
+
+    #         # TODO: try with maxsize
+    #         # TODO: also try with q.put into imap loop
+
+    #         def worker(i):
+    #             if i == 1:
+    #                 put(q, 2)
+    #                 put(q, 3)
+    #                 put(q, 4)
+
+    #             time.sleep(0.01)
+
+    #             if i == 4:
+    #                 put(q, 5)
+
+    #             q.task_done()
+    #             return i
+
+    #         result = list(executor.imap(q, worker))
+    #         print(result)
