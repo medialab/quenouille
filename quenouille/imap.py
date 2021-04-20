@@ -6,7 +6,7 @@
 #
 import sys
 import time
-from queue import Queue
+from queue import Queue, Empty
 from threading import Thread, Event, Lock, Condition
 from collections import OrderedDict
 from collections.abc import Iterable, Sized
@@ -18,6 +18,7 @@ from quenouille.utils import (
     clear,
     flush,
     smash,
+    is_queue,
     ThreadSafeIterator,
     SmartTimer
 )
@@ -33,6 +34,8 @@ from quenouille.constants import (
 # TODO: doc callable parallelism be sure to return same per domain, + not more than threads
 # TODO: doc None group is never throttled!
 # TODO: doc what about parallelism > 1 and throttle > 0?
+# TODO: doc or test footgun of queue with maxsize < max_workers (raise error if possible?)
+# TODO: doc queue until drain
 
 
 class Job(object):
@@ -75,6 +78,7 @@ class IterationState(object):
         self.started_count = 0
         self.finished_count = 0
         self.finished = False
+        self.task_is_finished = Condition()
 
     def start_task(self):
         with self.lock:
@@ -83,6 +87,17 @@ class IterationState(object):
     def finish_task(self):
         with self.lock:
             self.finished_count += 1
+
+        with self.task_is_finished:
+            self.task_is_finished.notify_all()
+
+    def wait_for_any_task_to_finish(self):
+        with self.task_is_finished:
+            self.task_is_finished.wait()
+
+    def has_running_tasks(self):
+        with self.lock:
+            return self.started_count > self.finished_count
 
     def declare_end(self):
         with self.lock:
@@ -363,8 +378,8 @@ def validate_max_workers(name, max_workers):
 def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffer_size,
                          throttle):
 
-    if not isinstance(iterable, Iterable):
-        raise TypeError('target is not iterable')
+    if not isinstance(iterable, Iterable) and not is_queue(iterable):
+        raise TypeError('target is not iterable nor a queue')
 
     if not callable(func):
         raise TypeError('worker function is not callable')
@@ -484,7 +499,12 @@ class ThreadPoolExecutor(object):
 
         self.imap_lock.acquire()
 
-        iterator = ThreadSafeIterator(iterable)
+        iterator = None
+        iterable_is_queue = is_queue(iterable)
+
+        if not iterable_is_queue:
+            iterator = ThreadSafeIterator(iterable)
+
         self.output_queue = Queue()
 
         # State
@@ -505,7 +525,17 @@ class ThreadPoolExecutor(object):
 
                         # Else we consume the iterator to find one
                         try:
-                            item = next(iterator)
+                            if not iterable_is_queue:
+                                item = next(iterator)
+                            else:
+                                try:
+                                    item = iterable.get_nowait()
+                                except Empty:
+                                    if state.has_running_tasks():
+                                        state.wait_for_any_task_to_finish()
+                                        continue
+                                    else:
+                                        raise StopIteration
                         except StopIteration:
                             if not buffer.empty():
                                 continue

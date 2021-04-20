@@ -9,6 +9,7 @@ from collections import defaultdict
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
+from quenouille.utils import put
 
 DATA = [
     ('A', 0.3, 0),
@@ -311,27 +312,28 @@ class TestImap(object):
         result = list(imap(blocking(), identity, 4))
         assert result == list(range(5))
 
-    # def test_queue(self):
-    #     with ThreadPoolExecutor(2) as executor:
-    #         q = Queue()
-    #         q.put(1)
+    def test_queue(self):
+        # TODO: try with maxsize
+        # TODO: also try with q.put into imap loop
+        # TODO: when is task_done necessary
+        q = Queue()
+        q.put(1)
 
-    #         # TODO: try with maxsize
-    #         # TODO: also try with q.put into imap loop
+        def worker(i):
+            if i == 1:
+                put(q, 2)
+                put(q, 3)
+                put(q, 4)
 
-    #         def worker(i):
-    #             if i == 1:
-    #                 put(q, 2)
-    #                 put(q, 3)
-    #                 put(q, 4)
+            if i == 3:
+                put(q, 4)
 
-    #             time.sleep(0.01)
+            time.sleep(0.01)
 
-    #             if i == 4:
-    #                 put(q, 5)
+            if i == 4:
+                put(q, 5)
 
-    #             q.task_done()
-    #             return i
+            return i
 
-    #         result = list(executor.imap(q, worker))
-    #         print(result)
+        result = list(imap(q, worker, 2))
+        assert result == [1, 2, 3, 4, 4, 5, 5]
