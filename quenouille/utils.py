@@ -129,6 +129,13 @@ class QueueIterator(object):
             yield item
             self.task_done()
 
+    def __repr__(self):
+        return '<{name} working={working!r} qsize={qsize!r}>'.format(
+            name=self.__class__.__name__,
+            working=self.working_threads,
+            qsize=self.queue.qsize()
+        )
+
 
 class SmartTimer(Timer):
     """

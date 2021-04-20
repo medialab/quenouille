@@ -33,7 +33,6 @@ from quenouille.constants import (
 # TODO: doc callable parallelism be sure to return same per domain, + not more than threads
 # TODO: doc None group is never throttled!
 # TODO: doc what about parallelism > 1 and throttle > 0?
-# TODO: args, kwargs callable from item
 
 
 class Job(object):
