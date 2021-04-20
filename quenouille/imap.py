@@ -857,15 +857,16 @@ def generate_function_doc(ordered=False):
                 item is supposed to belong. This will be used to ensure maximum
                 group parallelism is respected.
             parallelism (int or callable, optional): Number of threads allowed to work
-                on the same group at once. Can also be a function taking groups and
-                returning their parallelism. Defaults to 1.
+                on a same group at once. Can also be a function taking a group and
+                returning its parallelism. Defaults to 1.
             buffer_size (int, optional): Max number of items the function will
                 buffer into memory while attempting to find an item that can be
                 passed to a worker immediately, while respecting throttling and
                 group parallelism. Defaults to 1024.
-            throttle (float or callable, optional): Optional throttle time to
-                wait between two of a same group's items. Can also be a function
-                taking the group & current item and returning the throttle time.
+            throttle (float or callable, optional): Optional throttle time, in
+                seconds, to wait before processing the next item of a given group.
+                Can also be a function taking the current item with its group and
+                returning the next throttle time.
 
         Yields:
             any: Will yield results based on given worker function.
