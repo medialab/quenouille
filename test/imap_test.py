@@ -322,7 +322,6 @@ class TestImap(object):
         assert result == list(range(5))
 
     def test_queue(self):
-        # TODO: try with maxsize
         q = queue_from([1])
 
         def worker(i):

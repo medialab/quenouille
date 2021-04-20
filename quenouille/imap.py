@@ -28,7 +28,7 @@ from quenouille.constants import (
 )
 
 # TODO: fully document this complex code...
-# TODO: handle queues natively (process queue until drained, or closable queue?)
+# TODO: doc document the fact that blocking input queue in iterator loop is unwise + task_done on your own
 # TODO: doc disclaimer about memory in the ordered case
 # TODO: doc parallelism > workers
 # TODO: doc callable parallelism be sure to return same per domain, + not more than threads
@@ -638,7 +638,7 @@ class ThreadPoolExecutor(object):
                         else:
                             yield job.result
 
-                    # Acknowledging this job was finished
+                    # Acknowledging the job was finished
                     # NOTE: this was moved after yielding items so that the
                     # generator body may enqueue new jobs. It is possible that
                     # this has a slight perf hit if the body performs heavy work?
