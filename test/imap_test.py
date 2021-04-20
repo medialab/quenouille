@@ -23,6 +23,10 @@ DATA = [
 ]
 
 
+def identity(x):
+    return x
+
+
 def sleeper(job):
     time.sleep(job[1] / 10)
     return job
@@ -152,22 +156,22 @@ class TestImap(object):
 
         group = lambda x: 'SAME'
 
-        nbs = set(imap_unordered(range(10), lambda x: x, 10, key=group, throttle=0.01))
+        nbs = set(imap_unordered(range(10), identity, 10, key=group, throttle=0.01))
         assert nbs == set(range(10))
 
-        nbs = set(imap_unordered(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=1))
+        nbs = set(imap_unordered(range(10), identity, 10, key=group, throttle=0.01, buffer_size=1))
         assert nbs == set(range(10))
 
-        nbs = set(imap_unordered(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=3))
+        nbs = set(imap_unordered(range(10), identity, 10, key=group, throttle=0.01, buffer_size=3))
         assert nbs == set(range(10))
 
-        nbs = list(imap(range(10), lambda x: x, 10, key=group, throttle=0.01))
+        nbs = list(imap(range(10), identity, 10, key=group, throttle=0.01))
         assert nbs == list(range(10))
 
-        nbs = list(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=1))
+        nbs = list(imap(range(10), identity, 10, key=group, throttle=0.01, buffer_size=1))
         assert nbs == list(range(10))
 
-        nbs = list(imap(range(10), lambda x: x, 10, key=group, throttle=0.01, buffer_size=3))
+        nbs = list(imap(range(10), identity, 10, key=group, throttle=0.01, buffer_size=3))
         assert nbs == list(range(10))
 
         results = list(imap_unordered(DATA, sleeper, 4, key=itemgetter(0), throttle=0.01))
@@ -186,7 +190,7 @@ class TestImap(object):
 
         group = lambda x: 'even' if x % 2 == 0 else 'odd'
 
-        nbs = set(imap(range(10), lambda x: x, 10, key=group, throttle=throttling))
+        nbs = set(imap(range(10), identity, 10, key=group, throttle=throttling))
 
         assert nbs == set(range(10))
 
@@ -204,6 +208,16 @@ class TestImap(object):
         with pytest.raises(RuntimeError):
             for i in imap(range(6, 15), hellraiser, 4):
                 pass
+
+    def test_raising_callable_throttle(self):
+        def hellraiser(g, i):
+            if i > 2:
+                raise TypeError
+
+            return 0.01
+
+        with pytest.raises(TypeError):
+            list(imap_unordered(range(5), identity, 4, throttle=hellraiser))
 
     def test_executor(self):
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -233,8 +247,8 @@ class TestImap(object):
                 with condition:
                     condition.wait()
 
-        result = list(imap(sleeping(), lambda x: x, 4))
+        result = list(imap(sleeping(), identity, 4))
         assert result == list(range(5))
 
-        result = list(imap(blocking(), lambda x: x, 4))
+        result = list(imap(blocking(), identity, 4))
         assert result == list(range(5))
