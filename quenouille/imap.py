@@ -698,6 +698,10 @@ class ThreadPoolExecutor(object):
                     # this has a slight perf hit if the body performs heavy work?
                     state.finish_task()
 
+                    # Cleanup memory and avoid keeping references attached to
+                    # ease up garbage collection
+                    del job
+
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
             target=enqueue
