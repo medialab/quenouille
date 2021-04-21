@@ -13,8 +13,6 @@ from collections.abc import Iterable, Sized
 from itertools import count
 
 from quenouille.utils import (
-    get,
-    put,
     clear,
     flush,
     smash,
@@ -533,7 +531,7 @@ class ThreadPoolExecutor(object):
     def __worker(self):
         try:
             while not self.teardown_event.is_set():
-                job = get(self.job_queue)
+                job = self.job_queue.get()
 
                 # Signaling we must tear down the worker thread
                 if job is THE_END_IS_NIGH:
@@ -542,7 +540,7 @@ class ThreadPoolExecutor(object):
 
                 job()
                 self.job_queue.task_done()
-                put(self.output_queue, job)
+                self.output_queue.put(job)
 
         except BaseException as e:
             smash(self.output_queue, e)
@@ -633,7 +631,7 @@ class ThreadPoolExecutor(object):
                     # Registering the job
                     buffer.register_job(job)
                     state.start_task()
-                    put(self.job_queue, job)
+                    self.job_queue.put(job)
 
             except BaseException as e:
                 smash(self.output_queue, e)
@@ -665,7 +663,7 @@ class ThreadPoolExecutor(object):
 
             with OutputContext(cleanup):
                 while not state.should_stop() and not end_event.is_set():
-                    job = get(self.output_queue)
+                    job = self.output_queue.get()
 
                     if job is THE_END_IS_NIGH:
                         break

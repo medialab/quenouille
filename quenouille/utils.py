@@ -9,20 +9,6 @@ import time
 from threading import Lock, Condition, Timer
 from queue import Empty, Full
 
-from quenouille.constants import FOREVER
-
-
-# For ref: https://docs.python.org/3/library/queue.html#queue.Queue.get
-# The timeout=FOREVER part is probably obsolete now
-def get(q):
-    return q.get(timeout=FOREVER)
-
-
-# For ref: https://docs.python.org/3/library/queue.html#queue.Queue.get
-# The timeout=FOREVER part is probably obsolete now
-def put(q, v):
-    return q.put(v, timeout=FOREVER)
-
 
 def clear(q):
     while True:
@@ -133,7 +119,7 @@ class QueueIterator(object):
                 continue
 
             with self.lock:
-                item = get(self.queue)
+                item = self.queue.get()
                 self.__inc()
 
             yield item

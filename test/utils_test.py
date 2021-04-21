@@ -7,7 +7,7 @@ from queue import Queue
 from collections import Counter
 
 from quenouille import QueueIterator, ThreadPoolExecutor
-from quenouille.utils import is_queue, put
+from quenouille.utils import is_queue
 
 
 class TestUtils(object):
@@ -65,29 +65,3 @@ class TestUtils(object):
             3: 4,
             4: 4
         }
-
-    # def test_queue_imap(self):
-    #     with ThreadPoolExecutor(2) as executor:
-    #         q = Queue()
-    #         q.put(1)
-
-    #         # TODO: try with maxsize
-    #         # TODO: also try with q.put into imap loop
-
-    #         iterator = QueueIterator(q)
-
-    #         def worker(i):
-    #             if i == 1:
-    #                 put(q, 2)
-    #                 put(q, 3)
-    #                 put(q, 4)
-
-    #             time.sleep(0.01)
-
-    #             if i == 4:
-    #                 put(q, 5)
-
-    #             return i
-
-    #         result = list(executor.imap(iterator, worker))
-    #         print(result)

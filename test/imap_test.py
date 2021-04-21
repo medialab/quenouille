@@ -9,7 +9,6 @@ from collections import defaultdict
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
-from quenouille.utils import put
 
 DATA = [
     ('A', 0.3, 0),
@@ -353,17 +352,17 @@ class TestImap(object):
 
         def worker(i):
             if i == 1:
-                put(q, 2)
-                put(q, 3)
-                put(q, 4)
+                q.put(2)
+                q.put(3)
+                q.put(4)
 
             if i == 3:
-                put(q, 4)
+                q.put(4)
 
             time.sleep(0.01)
 
             if i == 4:
-                put(q, 5)
+                q.put(5)
 
             return i
 
@@ -378,17 +377,17 @@ class TestImap(object):
             result.append(i)
 
             if i == 1:
-                put(q, 2)
-                put(q, 3)
-                put(q, 4)
+                q.put(2)
+                q.put(3)
+                q.put(4)
 
             if i == 3:
-                put(q, 4)
+                q.put(4)
 
             time.sleep(0.01)
 
             if i == 4:
-                put(q, 5)
+                q.put(5)
 
         assert q.empty()
         assert result == [1, 2, 3, 4, 4, 5, 5]
