@@ -414,6 +414,8 @@ class OutputContext(object):
         if isinstance(exc_type, GeneratorExit):
             return True
 
+        return False
+
 
 def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None):
     if max_workers is None:
