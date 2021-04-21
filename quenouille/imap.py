@@ -414,12 +414,18 @@ class OutputContext(object):
             return True
 
 
-def validate_max_workers(name, max_workers=None):
+def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None):
     if max_workers is None:
         return
 
     if not isinstance(max_workers, int) or max_workers < 1:
         raise TypeError('"%s" should be an integer > 0' % name)
+
+    if initializer is not None and not callable(initializer):
+        raise TypeError('"initializer" is not callable')
+
+    if initargs is not None and not isinstance(initargs, Iterable):
+        raise TypeError('"initargs" is not iterable')
 
 
 def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffer_size,
@@ -462,20 +468,36 @@ class ThreadPoolExecutor(object):
     Args:
         max_workers (int, optional): Number of threads to use.
             Defaults to min(32, os.cpu_count() + 1).
+        initializer (callable, optional): Function that will be run when starting
+            each worker thread. Can be useful to setup a threading local context
+            for instance.
+        initargs (iterable, optional): Arguments to pass to the thread initializer
+            function.
     """
 
-    def __init__(self, max_workers=None):
-        validate_max_workers('max_workers', max_workers)
+    def __init__(self, max_workers=None, initializer=None, initargs=tuple()):
+        validate_threadpool_kwargs(
+            'max_workers',
+            max_workers,
+            initializer=initializer,
+            initargs=initargs
+        )
 
         if max_workers is None:
             max_workers = get_default_maxworkers()
 
         self.max_workers = max_workers
+
+        self.initializer = initializer
+        self.initargs = list(initargs)
+
         self.job_queue = Queue(maxsize=max_workers)
         self.output_queue = None
+
         self.teardown_event = Event()
         self.teardown_lock = Lock()
         self.imap_lock = Lock()
+
         self.closed = False
 
         self.threads = [
@@ -756,9 +778,15 @@ class ThreadPoolExecutor(object):
 
 
 def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
-                   buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+                   buffer_size=DEFAULT_BUFFER_SIZE, throttle=0,
+                   initializer=None, initargs=tuple()):
 
-    validate_max_workers('threads', threads)
+    validate_threadpool_kwargs(
+        'threads',
+        threads,
+        initializer=initializer,
+        initargs=initargs
+    )
     validate_imap_kwargs(
         iterable=iterable,
         func=func,
@@ -790,9 +818,15 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
 
 
 def imap(iterable, func, threads=None, *, key=None, parallelism=1,
-         buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
+         buffer_size=DEFAULT_BUFFER_SIZE, throttle=0,
+         initializer=None, initargs=tuple()):
 
-    validate_max_workers('threads', threads)
+    validate_threadpool_kwargs(
+        'threads',
+        threads,
+        initializer=initializer,
+        initargs=initargs
+    )
     validate_imap_kwargs(
         iterable=iterable,
         func=func,
@@ -856,6 +890,11 @@ def generate_function_doc(ordered=False):
                 seconds, to wait before processing the next item of a given group.
                 Can also be a function taking last group, item and returning next
                 throttle time for this group.
+            initializer (callable, optional): Function that will be run when starting
+                each worker thread. Can be useful to setup a threading local context
+                for instance.
+            initargs (iterable, optional): Arguments to pass to the thread initializer
+                function.
 
 
         Yields:
