@@ -54,11 +54,11 @@ class Job(object):
             self.exc_info = sys.exc_info()
 
     def __repr__(self):
-        return '<{name} id={id!r} index={index!r} group={group!r} args={args!r}>'.format(
+        return '<{name} id={id!r} index={index!r} group={group!r} item={item!r}>'.format(
             name=self.__class__.__name__,
             index=self.index,
             group=self.group,
-            args=self.args,
+            item=self.item,
             id=id(self)
         )
 
