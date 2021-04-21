@@ -7,7 +7,7 @@
 import sys
 import time
 from queue import Queue, Empty
-from threading import Thread, Event, Lock, Condition
+from threading import Thread, Event, Lock, Condition, Barrier
 from collections import OrderedDict
 from collections.abc import Iterable, Sized
 from itertools import count
@@ -499,6 +499,7 @@ class ThreadPoolExecutor(object):
         self.teardown_lock = Lock()
         self.broken_lock = Lock()
         self.imap_lock = Lock()
+        self.boot_barrier = Barrier(max_workers + 1)
 
         self.closed = False
         self.broken = False
@@ -513,6 +514,18 @@ class ThreadPoolExecutor(object):
 
         for thread in self.threads:
             thread.start()
+
+        self.boot_barrier.wait()
+
+        # Are we broken?
+        broken = False
+
+        with self.broken_lock:
+            broken = self.broken
+
+        if broken:
+            self.__teardown()
+            raise BrokenThreadPool
 
     def __enter__(self):
         if self.closed:
@@ -565,7 +578,11 @@ class ThreadPoolExecutor(object):
             with self.broken_lock:
                 self.broken = True
 
-            return
+        self.boot_barrier.wait()
+
+        with self.broken_lock:
+            if self.broken:
+                return
 
         try:
             while not self.teardown_event.is_set():
@@ -596,10 +613,7 @@ class ThreadPoolExecutor(object):
         if self.closed:
             raise RuntimeError('cannot use thread pool after teardown')
 
-        # Cannot run if broken
-        with self.broken_lock:
-            if self.broken:
-                raise BrokenThreadPool
+        assert not self.broken
 
         self.imap_lock.acquire()
 

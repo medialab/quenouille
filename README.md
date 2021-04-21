@@ -100,6 +100,8 @@ for html in imap(urls(), fetch, 10, key=get_domain_name, throttle=5, buffer_size
 * **parallelism** *(int or callable, optional)* [`1`]: Number of threads allowed to work on a same group at once. Can also be a function taking a group and returning its parallelism.
 * **buffer_size** *(int, optional)* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find an item that can be passed to a worker immediately, all while respecting throttling and group parallelism.
 * **throttle** *(int or float or callable, optional)*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking last group, item and result and returning next throttle time for this group.
+* **initializer** *(callable, optional)*: Function to run at the start of each thread worker. Can be useful to setup [thread-local data](https://docs.python.org/3/library/threading.html#thread-local-data), for instance. Remember this function must be threadsafe and should not block because the thread pool will wait for each thread to be correctly booted before being able to proceed. If one of the function calls fails, the thread pool will raise a `quenouille.exceptions.BrokenThreadPool` error and terminate immediately.
+* **initargs** *(iterable, optional)*: arguments to pass to the `initializer` function.
 
 *Using a queue rather than an iterable*
 
@@ -154,6 +156,10 @@ with ThreadPoolExecutor(max_workers=4) as executor:
   for j in executor.imap_unordered(range(10), worker):
     print(j)
 ```
+
+*Arguments*
+
+* **max_workers** *(int, optional)*: Maximum number of threads to use. Defaults to `min(32, os.cpu_count() + 1)`
 
 ### Miscellaneous notes
 

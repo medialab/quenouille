@@ -445,8 +445,11 @@ class TestImap(object):
         result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=iterable_initargs()))
         assert result == [13, 14, 15, 16, 17]
 
-        # with pytest.raises(BrokenThreadPool):
-        #     result = list(imap(range(5), worker, 2, initializer=hellraiser))
+        with pytest.raises(BrokenThreadPool):
+            result = list(imap(range(5), worker, 2, initializer=hellraiser))
 
-        # result = list(imap(range(10), worker_sleep, 4, initializer=stateful_hellraiser))
-        # print(threading.active_count())
+        with pytest.raises(BrokenThreadPool):
+            result = list(imap(range(10), worker_sleep, 4, initializer=stateful_hellraiser))
+
+        with pytest.raises(BrokenThreadPool):
+            executor = ThreadPoolExecutor(2, initializer=hellraiser)
