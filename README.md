@@ -93,13 +93,13 @@ for html in imap(urls(), fetch, 10, key=get_domain_name, throttle=5, buffer_size
 
 *Arguments*
 
-* **iterable** *iterable*: Any python iterable.
-* **func** *callable*: Function used to perform the desired tasks. The function takes an item yielded by the given iterable as single argument. Note that since this function will be dispatched in worker threads, so you should ensure it is thread-safe.
-* **threads** *?int*: Maximum number of threads to use. Defaults to `min(32, os.cpu_count() + 1)`
-* **key** *?callable*: Function returning to which "group" a given item is supposed to belong. This will be used to ensure maximum parallelism is respected.
-* **parallelism** *?int|callable* [`1`]: Number of threads allowed to work on a same group at once. Can also be a function taking a group and returning its parallelism.
-* **buffer_size** *?int* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find an item that can be passed to a worker immediately, all while respecting throttling and group parallelism.
-* **throttle** *?int|float|callable*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking last group, item and result and returning next throttle time for this group.
+* **iterable** *(iterable)*: Any python iterable.
+* **func** *(callable)*: Function used to perform the desired tasks. The function takes an item yielded by the given iterable as single argument. Note that since this function will be dispatched in worker threads, so you should ensure it is thread-safe.
+* **threads** *(int, optional)*: Maximum number of threads to use. Defaults to `min(32, os.cpu_count() + 1)`
+* **key** *(callable, optional)*: Function returning to which "group" a given item is supposed to belong. This will be used to ensure maximum parallelism is respected.
+* **parallelism** *(int or callable, optional)* [`1`]: Number of threads allowed to work on a same group at once. Can also be a function taking a group and returning its parallelism.
+* **buffer_size** *(int, optional)* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find an item that can be passed to a worker immediately, all while respecting throttling and group parallelism.
+* **throttle** *(int or float or callable, optional)*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking last group, item and result and returning next throttle time for this group.
 
 *Using a queue rather than an iterable*
 
@@ -197,7 +197,7 @@ def throttle(group, item):
 
 *Typical deadlocks*
 
-Even if `imap` can process an input queue, one should note that you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. It can be easy to footgun yourself if your queue has a `maxsize`, for instance:
+Even if `imap` can process an input queue, you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. It can be easy to footgun yourself if your queue has a `maxsize`, for instance:
 
 ```python
 from queue import Queue
@@ -220,10 +220,10 @@ for i in imap(job_queue, worker):
 
 *Design choices*
 
-To enable you to add items to the queue in your loop body and so it can safely detect when your queue is drained without race condition, `quenouille` acknowledges that a task is finished only after what you execute in the loop body is done.
+To enable you to add items to the queue in the loop body and so it can safely detect when your queue is drained without race condition, `quenouille` acknowledges that a task is finished only after what you execute in the loop body is done.
 
 This means that sometimes it might be more performant to only add items to the queue from the worker functions rather than from the loop body.
 
 *queue.task_done*
 
-For now, `quenouille` does not call `queue.task_done` for you, so this remains your responsability, if you want to be able to call `queue.join` down the lane.
+For now, `quenouille` does not call `queue.task_done` for you, so this remains your responsability, if you want to be able to call `queue.join` down the line.
