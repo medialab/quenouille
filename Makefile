@@ -22,6 +22,7 @@ lint:
 	@echo
 	@echo Searching for unused imports...
 	importchecker $(SOURCE) | grep -v __init__ || true
+	importchecker test | grep -v __init__ || true
 	@echo
 
 hint:

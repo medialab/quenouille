@@ -6,7 +6,7 @@ import pytest
 from queue import Queue
 from collections import Counter
 
-from quenouille import QueueIterator, ThreadPoolExecutor
+from quenouille import QueueIterator
 from quenouille.utils import is_queue
 
 

@@ -5,7 +5,6 @@ import time
 import pytest
 import threading
 from queue import Queue
-from collections import defaultdict
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
