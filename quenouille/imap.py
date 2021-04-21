@@ -535,7 +535,10 @@ class ThreadPoolExecutor(object):
 
             # Waiting for worker threads to end
             for thread in self.threads:
-                thread.join()
+                try:
+                    thread.join()
+                except RuntimeError:
+                    pass
 
             self.closed = True
 
@@ -804,7 +807,11 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
         )
 
     def generator():
-        with ThreadPoolExecutor(max_workers=threads) as executor:
+        with ThreadPoolExecutor(
+            max_workers=threads,
+            initializer=initializer,
+            initargs=initargs
+        ) as executor:
             yield from executor.imap_unordered(
                 iterable,
                 func,
@@ -844,7 +851,11 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
         )
 
     def generator():
-        with ThreadPoolExecutor(max_workers=threads) as executor:
+        with ThreadPoolExecutor(
+            max_workers=threads,
+            initializer=initializer,
+            initargs=initargs
+        ) as executor:
             yield from executor.imap(
                 iterable,
                 func,

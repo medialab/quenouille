@@ -402,3 +402,30 @@ class TestImap(object):
         result = list(imap(DATA, identity))
 
         assert result == DATA
+
+    # def test_initializer(self):
+    #     context = threading.local()
+
+    #     def iterable_initargs():
+    #         yield 10
+
+    #     def constant_init(offset=0):
+    #         context.number = 3 + offset
+
+    #     def hellraiser():
+    #         raise RuntimeError
+
+    #     def worker(n):
+    #         return n + context.number
+
+    #     result = list(imap(range(5), worker, 2, initializer=constant_init))
+    #     assert result == [3, 4, 5, 6, 7]
+
+    #     result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=(3,)))
+    #     assert result == [6, 7, 8, 9, 10]
+
+    #     result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=iterable_initargs()))
+    #     assert result == [13, 14, 15, 16, 17]
+
+    #     result = list(imap(range(5), worker, 2, initializer=hellraiser))
+    #     print(threading.active_count())
