@@ -12,6 +12,7 @@ from collections import OrderedDict
 from collections.abc import Iterable, Sized
 from itertools import count
 
+from quenouille.exceptions import BrokenThreadPool
 from quenouille.utils import (
     clear,
     flush,
@@ -496,9 +497,11 @@ class ThreadPoolExecutor(object):
 
         self.teardown_event = Event()
         self.teardown_lock = Lock()
+        self.broken_lock = Lock()
         self.imap_lock = Lock()
 
         self.closed = False
+        self.broken = False
 
         self.threads = [
             Thread(
@@ -536,7 +539,8 @@ class ThreadPoolExecutor(object):
             # Waiting for worker threads to end
             for thread in self.threads:
                 try:
-                    thread.join()
+                    if thread.is_alive():
+                        thread.join()
                 except RuntimeError:
                     pass
 
@@ -555,6 +559,15 @@ class ThreadPoolExecutor(object):
 
     def __worker(self):
         try:
+            if self.initializer is not None:
+                self.initializer(*self.initargs)
+        except BaseException:
+            with self.broken_lock:
+                self.broken = True
+
+            return
+
+        try:
             while not self.teardown_event.is_set():
                 job = self.job_queue.get()
 
@@ -565,6 +578,8 @@ class ThreadPoolExecutor(object):
 
                 job()
                 self.job_queue.task_done()
+
+                assert self.output_queue is not None
                 self.output_queue.put(job)
 
         except BaseException as e:
@@ -580,6 +595,11 @@ class ThreadPoolExecutor(object):
         # Cannot run if already closed
         if self.closed:
             raise RuntimeError('cannot use thread pool after teardown')
+
+        # Cannot run if broken
+        with self.broken_lock:
+            if self.broken:
+                raise BrokenThreadPool
 
         self.imap_lock.acquire()
 

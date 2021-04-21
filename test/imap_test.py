@@ -9,6 +9,7 @@ from collections import defaultdict
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
+from quenouille.exceptions import BrokenThreadPool
 
 DATA = [
     ('A', 0.3, 0),
@@ -403,29 +404,50 @@ class TestImap(object):
 
         assert result == DATA
 
-    # def test_initializer(self):
-    #     context = threading.local()
+    def test_initializer(self):
+        context = threading.local()
 
-    #     def iterable_initargs():
-    #         yield 10
+        def iterable_initargs():
+            yield 10
 
-    #     def constant_init(offset=0):
-    #         context.number = 3 + offset
+        def constant_init(offset=0):
+            context.number = 3 + offset
 
-    #     def hellraiser():
-    #         raise RuntimeError
+        def hellraiser():
+            raise RuntimeError
 
-    #     def worker(n):
-    #         return n + context.number
+        c = 0
+        lock = threading.Lock()
 
-    #     result = list(imap(range(5), worker, 2, initializer=constant_init))
-    #     assert result == [3, 4, 5, 6, 7]
+        def stateful_hellraiser():
+            context.number = 6
+            nonlocal c
 
-    #     result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=(3,)))
-    #     assert result == [6, 7, 8, 9, 10]
+            with lock:
+                if c > 1:
+                    raise RuntimeError
 
-    #     result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=iterable_initargs()))
-    #     assert result == [13, 14, 15, 16, 17]
+                c += 1
+                time.sleep(0.01)
 
-    #     result = list(imap(range(5), worker, 2, initializer=hellraiser))
-    #     print(threading.active_count())
+        def worker(n):
+            return n + context.number
+
+        def worker_sleep(n):
+            time.sleep(0.1)
+            return n + context.number
+
+        result = list(imap(range(5), worker, 2, initializer=constant_init))
+        assert result == [3, 4, 5, 6, 7]
+
+        result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=(3,)))
+        assert result == [6, 7, 8, 9, 10]
+
+        result = list(imap(range(5), worker, 2, initializer=constant_init, initargs=iterable_initargs()))
+        assert result == [13, 14, 15, 16, 17]
+
+        # with pytest.raises(BrokenThreadPool):
+        #     result = list(imap(range(5), worker, 2, initializer=hellraiser))
+
+        # result = list(imap(range(10), worker_sleep, 4, initializer=stateful_hellraiser))
+        # print(threading.active_count())
