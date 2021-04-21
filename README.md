@@ -40,39 +40,55 @@ Finally note that this function comes in two flavors: `imap_unordered`, which wi
 
 ```python
 import csv
-from quenouille import imap_unordered
+from quenouille import imap, imap_unordered
 
-# Example fetching urls from a CSV file
-with open(csv_path, 'r') as f:
-  reader = csv.DictReader(f)
+# Reading urls lazily from a CSV file using a generator:
+def urls():
+  with open('urls.csv') as f:
+    reader = csv.DictReader(f)
 
-  urls = (line['url'] for line in reader)
+    for line in reader:
+      yield line['url']
 
-  # Performing 10 requests at a time:
-  for html in imap(urls, fetch, 10):
-    print(html)
+# Defining some functions
+def fetch(url):
+  # ... e.g. use urllib3 to download the url
+  # remember this function must be threadsafe
+  return html
 
-  # Ensuring we don't hit the same domain more that twice at a time
-  for html in imap(urls, fetch, 10, key=domain_name, parallelism=2):
-    print(html)
+def get_domain_name(url):
+  # ... e.g. use ural to extract domain name from url
+  return domain_name
 
-  # Waiting 5 seconds between each request on a same domain
-  for html in imap(urls, fetch, 10, key=domain_name, throttle=5):
-    print(html)
+# Performing 10 requests at a time:
+for html in imap(urls(), fetch, 10):
+  print(html)
 
-  # Throttle time depending on domain
-  def throttle(group, item, result):
-    if group == 'lemonde.fr':
-      return 10
+# Ouputting results as soon as possible (in arbitrary order)
+for html in imap_unordered(urls(), fetch, 10):
+  print(html)
 
-    return 2
+# Ensuring we don't hit the same domain more that twice at a time
+for html in imap(urls(), fetch, 10, key=get_domain_name, parallelism=2):
+  print(html)
 
-  for html in imap(urls, fetch, 10, key=domain_name, throttle=throttle):
-    print(html)
+# Waiting 5 seconds between each request on a same domain
+for html in imap(urls(), fetch, 10, key=get_domain_name, throttle=5):
+  print(html)
 
-  # Only load 10 urls into memory when attempting to find next suitable job
-  for html in imap(urls, fetch, 10, key=domain_name, throttle=5, buffer_size=10):
-    print(html)
+# Throttle time depending on domain
+def throttle(group, item, result):
+  if group == 'lemonde.fr':
+    return 10
+
+  return 2
+
+for html in imap(urls(), fetch, 10, key=get_domain_name, throttle=throttle):
+  print(html)
+
+# Only load 10 urls into memory when attempting to find next suitable job
+for html in imap(urls(), fetch, 10, key=get_domain_name, throttle=5, buffer_size=10):
+  print(html)
 ```
 
 *Arguments*
