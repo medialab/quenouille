@@ -551,11 +551,8 @@ class ThreadPoolExecutor(object):
 
             # Waiting for worker threads to end
             for thread in self.threads:
-                try:
-                    if thread.is_alive():
-                        thread.join()
-                except RuntimeError:
-                    pass
+                if thread.is_alive():
+                    thread.join()
 
             self.closed = True
 
