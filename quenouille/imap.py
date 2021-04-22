@@ -411,11 +411,6 @@ class OutputContext(object):
     def __exit__(self, exc_type, *args):
         self.cleanup(normal_exit=exc_type is None)
 
-        if isinstance(exc_type, GeneratorExit):
-            return True
-
-        return False
-
 
 def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None):
     if max_workers is None:
