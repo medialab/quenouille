@@ -92,6 +92,12 @@ class TestImap(object):
 
                 list(executor.imap(DATA, work))
 
+        with pytest.raises(TypeError):
+            imap(DATA, sleeper, 2, join='test')
+
+        with pytest.raises(TypeError):
+            imap(DATA, sleeper, 2, daemonic='test')
+
     def test_basics(self):
 
         results = list(imap_unordered(DATA, sleeper, 2))

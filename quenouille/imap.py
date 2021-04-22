@@ -418,7 +418,8 @@ class OutputContext(object):
         self.cleanup(normal_exit=exc_type is None)
 
 
-def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None):
+def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None,
+                               join=None, daemonic=None):
     if max_workers is None:
         return
 
@@ -430,6 +431,12 @@ def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initarg
 
     if initargs is not None and not isinstance(initargs, Iterable):
         raise TypeError('"initargs" is not iterable')
+
+    if not isinstance(join, bool):
+        raise TypeError('"join" should be boolean')
+
+    if not isinstance(daemonic, bool):
+        raise TypeError('"daemonic" should be boolean')
 
 
 def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffer_size,
@@ -477,14 +484,22 @@ class ThreadPoolExecutor(object):
             for instance.
         initargs (iterable, optional): Arguments to pass to the thread initializer
             function.
+        join (bool, optional): Whether to join worker threads on executor teardown.
+            Defaults to True.
+        daemonic (bool, optional): Whether to spawn daemon worker threads.
+            Defaults to False.
     """
 
-    def __init__(self, max_workers=None, initializer=None, initargs=tuple()):
+    def __init__(self, max_workers=None, initializer=None, initargs=tuple(),
+                 join=True, daemonic=False):
+
         validate_threadpool_kwargs(
             'max_workers',
             max_workers,
             initializer=initializer,
-            initargs=initargs
+            initargs=initargs,
+            join=join,
+            daemonic=daemonic
         )
 
         if max_workers is None:
@@ -808,13 +823,15 @@ class ThreadPoolExecutor(object):
 
 def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
                    buffer_size=DEFAULT_BUFFER_SIZE, throttle=0,
-                   initializer=None, initargs=tuple()):
+                   initializer=None, initargs=tuple(), join=True, daemonic=False):
 
     validate_threadpool_kwargs(
         'threads',
         threads,
         initializer=initializer,
-        initargs=initargs
+        initargs=initargs,
+        join=join,
+        daemonic=daemonic
     )
     validate_imap_kwargs(
         iterable=iterable,
@@ -836,7 +853,9 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
         with ThreadPoolExecutor(
             max_workers=threads,
             initializer=initializer,
-            initargs=initargs
+            initargs=initargs,
+            join=join,
+            daemonic=daemonic
         ) as executor:
             yield from executor.imap_unordered(
                 iterable,
@@ -852,13 +871,15 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
 
 def imap(iterable, func, threads=None, *, key=None, parallelism=1,
          buffer_size=DEFAULT_BUFFER_SIZE, throttle=0,
-         initializer=None, initargs=tuple()):
+         initializer=None, initargs=tuple(), join=True, daemonic=False):
 
     validate_threadpool_kwargs(
         'threads',
         threads,
         initializer=initializer,
-        initargs=initargs
+        initargs=initargs,
+        join=join,
+        daemonic=daemonic
     )
     validate_imap_kwargs(
         iterable=iterable,
@@ -880,7 +901,9 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
         with ThreadPoolExecutor(
             max_workers=threads,
             initializer=initializer,
-            initargs=initargs
+            initargs=initargs,
+            join=join,
+            daemonic=daemonic
         ) as executor:
             yield from executor.imap(
                 iterable,
@@ -932,7 +955,10 @@ def generate_function_doc(ordered=False):
                 for instance.
             initargs (iterable, optional): Arguments to pass to the thread initializer
                 function.
-
+            join (bool, optional): Whether to join worker threads on executor teardown.
+                Defaults to True.
+            daemonic (bool, optional): Whether to spawn daemon worker threads.
+                Defaults to False.
 
         Yields:
             any: Will yield results based on given worker function.
