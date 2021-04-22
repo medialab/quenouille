@@ -358,6 +358,9 @@ class Buffer(object):
         if self.throttle_timer is not None:
             self.throttle_timer.cancel()
 
+            if self.throttle_timer.is_alive():
+                self.throttle_timer.join()
+
         self.throttled_groups = {}
         self.throttle_timer = None
 
