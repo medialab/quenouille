@@ -520,12 +520,7 @@ class ThreadPoolExecutor(object):
         self.boot_barrier.wait()
 
         # Are we broken?
-        broken = False
-
-        with self.broken_lock:
-            broken = self.broken
-
-        if broken:
+        if self.broken:
             self.__teardown()
             raise BrokenThreadPool
 
