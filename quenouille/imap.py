@@ -24,7 +24,8 @@ from quenouille.utils import (
 )
 from quenouille.constants import (
     THE_END_IS_NIGH,
-    DEFAULT_BUFFER_SIZE
+    DEFAULT_BUFFER_SIZE,
+    TIMER_EPSILON
 )
 
 
@@ -331,7 +332,7 @@ class Buffer(object):
                 current_time = time.time()
 
                 for group, release_time in self.throttled_groups.items():
-                    if current_time >= release_time:
+                    if current_time >= (release_time - TIMER_EPSILON):
                         groups_to_release.append(group)
                     else:
                         if earliest_next_time is None or release_time < earliest_next_time:
