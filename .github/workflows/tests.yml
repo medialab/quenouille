@@ -33,6 +33,10 @@ jobs:
           # Windows
           - os: windows-latest
             python-version: "3.6"
+          - os: windows-latest
+            python-version: "3.7"
+          - os: windows-latest
+            python-version: "3.8"
 
     runs-on: ${{ matrix.os }}
 
