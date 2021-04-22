@@ -717,8 +717,6 @@ class ThreadPoolExecutor(object):
             self.imap_lock.release()
 
         def output():
-            yield_lock = Lock()  # NOTE: I am not sure this lock is necessary
-
             with OutputContext(cleanup):
                 while not state.should_stop() and not end_event.is_set():
                     job = self.output_queue.get()
@@ -742,11 +740,10 @@ class ThreadPoolExecutor(object):
                         raise job.exc_info[1].with_traceback(job.exc_info[2])
 
                     # Actually yielding the value to main thread
-                    with yield_lock:
-                        if ordered:
-                            yield from ordered_output_buffer.output(job)
-                        else:
-                            yield job.result
+                    if ordered:
+                        yield from ordered_output_buffer.output(job)
+                    else:
+                        yield job.result
 
                     # Acknowledging the job was finished
                     # NOTE: this was moved after yielding items so that the
