@@ -506,6 +506,8 @@ class ThreadPoolExecutor(object):
             max_workers = get_default_maxworkers()
 
         self.max_workers = max_workers
+        self.join = join
+        self.daemonic = daemonic
 
         self.initializer = initializer
         self.initargs = list(initargs)
@@ -525,7 +527,8 @@ class ThreadPoolExecutor(object):
         self.threads = [
             Thread(
                 name='Thread-quenouille-%i-%i' % (id(self), n),
-                target=self.__worker
+                target=self.__worker,
+                daemon=self.daemonic
             )
             for n in range(max_workers)
         ]
@@ -563,9 +566,10 @@ class ThreadPoolExecutor(object):
             self.__clear_output_queue()
 
             # Waiting for worker threads to end
-            for thread in self.threads:
-                if thread.is_alive():
-                    thread.join()
+            if self.join:
+                for thread in self.threads:
+                    if thread.is_alive():
+                        thread.join()
 
             self.closed = True
 

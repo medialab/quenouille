@@ -12,11 +12,12 @@ def granular_sleep(t):
 
 def worker(i):
     # granular_sleep(2)
-    time.sleep(3)
+    time.sleep(5)
     return i
 
+
 try:
-    for i in imap_unordered(range(100_000), worker, 25):
+    for i in imap_unordered(range(100_000), worker, 25, daemonic=True, join=False):
         print(i)
 except KeyboardInterrupt:
     raise
