@@ -308,6 +308,7 @@ class Buffer(object):
         if self.throttle_timer is not None:
             if throttle_time < self.throttle_timer.remaining():
                 self.throttle_timer.cancel()
+                self.throttle_timer.join()
             else:
                 return
 
@@ -345,6 +346,9 @@ class Buffer(object):
                 # Relaunching timer?
                 if earliest_next_time is not None:
                     time_to_wait = earliest_next_time - current_time
+
+                    assert time_to_wait >= 0
+
                     self.__spawn_timer(time_to_wait)
 
             # Notifying waiters
@@ -357,9 +361,7 @@ class Buffer(object):
     def teardown(self):
         if self.throttle_timer is not None:
             self.throttle_timer.cancel()
-
-            if self.throttle_timer.is_alive():
-                self.throttle_timer.join()
+            self.throttle_timer.join()
 
         self.throttled_groups = {}
         self.throttle_timer = None
