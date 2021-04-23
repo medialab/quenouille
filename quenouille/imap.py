@@ -666,7 +666,7 @@ class ThreadPoolExecutor(object):
                                 item = next(iterator)
                             else:
                                 try:
-                                    item = iterable.get_nowait()
+                                    item = iterable.get(block=False)
                                 except Empty:
                                     if state.has_running_tasks():
                                         state.wait_for_any_task_to_finish()
