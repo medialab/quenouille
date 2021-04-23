@@ -513,7 +513,7 @@ class ThreadPoolExecutor(object):
         self.initargs = list(initargs)
 
         self.job_queue = Queue(maxsize=max_workers)
-        self.output_queue = None
+        self.output_queue = Queue()
 
         self.teardown_event = Event()
         self.teardown_lock = Lock()
@@ -574,8 +574,7 @@ class ThreadPoolExecutor(object):
             self.closed = True
 
     def __clear_output_queue(self):
-        if self.output_queue:
-            clear(self.output_queue)
+        clear(self.output_queue)
 
     def __cancel_all_jobs(self):
         clear(self.job_queue)
@@ -636,8 +635,6 @@ class ThreadPoolExecutor(object):
 
         if not iterable_is_queue:
             iterator = ThreadSafeIterator(iterable)
-
-        self.output_queue = Queue()
 
         # State
         job_counter = count()
