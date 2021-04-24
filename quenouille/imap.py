@@ -532,8 +532,13 @@ class ThreadPoolExecutor(object):
             for n in range(max_workers)
         ]
 
-        for thread in self.threads:
-            thread.start()
+        try:
+            for thread in self.threads:
+                thread.start()
+        except BaseException:
+            self.boot_barrier.abort()
+            self.shutdown(wait=self.wait)
+            raise
 
         try:
             self.boot_barrier.wait()
