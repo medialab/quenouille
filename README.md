@@ -151,12 +151,18 @@ If you need to run `imap` or `imap_unordered` multiple times in succession while
 ```python
 from quenouille import ThreadPoolExecutor
 
+# Using it as a context manager:
 with ThreadPoolExecutor(max_workers=4) as executor:
   for i in executor.imap(range(10), worker):
     print(i)
 
   for j in executor.imap_unordered(range(10), worker):
     print(j)
+
+# Or if you prefer shutting down the executor explicitly:
+executor = ThreadPoolExecutor()
+executor.imap(range(10), worker)
+executor.shutdown(wait=False)
 ```
 
 *Arguments*

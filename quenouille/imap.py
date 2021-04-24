@@ -540,7 +540,7 @@ class ThreadPoolExecutor(object):
 
         # Are we broken?
         if self.broken:
-            self.__teardown()
+            self.shutdown(wait=self.wait)
             raise BrokenThreadPool
 
     def __enter__(self):
@@ -550,9 +550,9 @@ class ThreadPoolExecutor(object):
         return self
 
     def __exit__(self, *args):
-        self.__teardown()
+        self.shutdown(wait=self.wait)
 
-    def __teardown(self):
+    def shutdown(self, wait=True):
         if self.closed:
             return
 
@@ -566,7 +566,7 @@ class ThreadPoolExecutor(object):
             self.__clear_output_queue()
 
             # Waiting for worker threads to end
-            if self.wait:
+            if wait:
                 for thread in self.threads:
                     if thread.is_alive():
                         thread.join()
