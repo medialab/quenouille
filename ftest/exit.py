@@ -17,7 +17,7 @@ def worker(i):
 
 
 try:
-    for i in imap_unordered(range(100_000), worker, 25, daemonic=True, join=False):
+    for i in imap_unordered(range(100_000), worker, 25, daemonic=True, wait=False):
         print(i)
 except KeyboardInterrupt:
     raise
