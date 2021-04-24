@@ -7,7 +7,7 @@
 import sys
 import time
 from queue import Queue, Empty
-from threading import Thread, Event, Lock, Condition, Barrier
+from threading import Thread, Event, Lock, Condition, Barrier, BrokenBarrierError
 from collections import OrderedDict
 from collections.abc import Iterable, Sized
 from itertools import count
@@ -522,7 +522,6 @@ class ThreadPoolExecutor(object):
         self.boot_barrier = Barrier(max_workers + 1)
 
         self.closed = False
-        self.broken = False
 
         self.threads = [
             Thread(
@@ -536,10 +535,9 @@ class ThreadPoolExecutor(object):
         for thread in self.threads:
             thread.start()
 
-        self.boot_barrier.wait()
-
-        # Are we broken?
-        if self.broken:
+        try:
+            self.boot_barrier.wait()
+        except BrokenBarrierError:
             self.shutdown(wait=self.wait)
             raise BrokenThreadPool
 
@@ -584,19 +582,20 @@ class ThreadPoolExecutor(object):
         flush(self.job_queue, self.max_workers, THE_END_IS_NIGH)
 
     def __worker(self):
+
+        # Thread initialization
         try:
             if self.initializer is not None:
                 self.initializer(*self.initargs)
+
+            self.boot_barrier.wait()
+
+        # NOTE: this naturally includes `BrokenBarrierError`
         except BaseException:
-            with self.broken_lock:
-                self.broken = True
+            self.boot_barrier.abort()
+            return
 
-        self.boot_barrier.wait()
-
-        with self.broken_lock:
-            if self.broken:
-                return
-
+        # Thread job consumer
         try:
             while not self.teardown_event.is_set():
                 job = self.job_queue.get()
@@ -626,7 +625,7 @@ class ThreadPoolExecutor(object):
         if self.closed:
             raise RuntimeError('cannot use thread pool after teardown')
 
-        assert not self.broken
+        assert not self.boot_barrier.broken
 
         self.imap_lock.acquire()
 
