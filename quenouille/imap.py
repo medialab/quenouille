@@ -584,7 +584,9 @@ class ThreadPoolExecutor(object):
 
     def __kill_workers(self):
         self.__cancel_all_jobs()
-        flush(self.job_queue, self.max_workers, THE_END_IS_NIGH)
+
+        n = sum(1 if t.is_alive() else 0 for t in self.threads)
+        flush(self.job_queue, n, THE_END_IS_NIGH)
 
     def __worker(self):
 
