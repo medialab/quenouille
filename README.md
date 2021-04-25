@@ -230,7 +230,7 @@ You can understand the callable `throttle` kwarg as "what's the minimum time the
 from random import random
 
 # Waiting 5 + (between 0 and 2) seconds
-def throttle(group, item):
+def throttle(group, item, result):
   return 5 + (2 * random())
 ```
 
