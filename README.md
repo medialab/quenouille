@@ -18,8 +18,10 @@ pip install quenouille
 
 ## Usage
 
-* [imap_unordered, imap](#imap_unordered-imap)
+* [imap, imap_unordered](#imap_unordered-imap)
 * [ThreadPoolExecutor](#threadpoolexecutor)
+  * [#.imap, #.imap_unordered](#executor-imap)
+  * [#.shutdown](#shutdown)
 * [Miscellaneous notes](#miscellaneous-notes)
   * [The None group](#the-none-group)
   * [Parallelism > workers](#parallelism--workers)
@@ -172,6 +174,25 @@ executor.shutdown(wait=False)
 * **initargs** *(iterable, optional)*: Arguments to pass to the `initializer` function.
 * **join** *(bool, optional)* [`True`]: Whether to join worker threads, i.e. wait for them to end, when closing the executor. Set this to `False` if you need to go on quickly without waiting for your worker threads to end when cleaning up the executor's resources. Just note that if you spawn other thread-intensive tasks or other executors afterwards in rapid succession, you might start too many threads at once.
 * **daemonic** *(bool, optional)* [`False`]: whether to spawn daemonic worker. If your worker are daemonic, the interpreter will not wait for them to end when exiting. This can be useful, combined to `join=False`, for instance, if you want your program to exit as soon as hitting ctrl+C (you might want to avoid this if your threads need to cleanup things on exit as they will be abruptly shut down).
+
+<h4 id="executor-imap">#.imap, #.imap_unordered</h4>
+
+Basically the same as described [here](#imap_unordered-imap) with the following arguments:
+
+* **iterable** *(iterable)*: Any python iterable.
+* **func** *(callable)*: Function used to perform the desired tasks. The function takes an item yielded by the given iterable as single argument. Note that since this function will be dispatched in worker threads, so you should ensure it is thread-safe.
+* **key** *(callable, optional)*: Function returning to which "group" a given item is supposed to belong. This will be used to ensure maximum parallelism is respected.
+* **parallelism** *(int or callable, optional)* [`1`]: Number of threads allowed to work on a same group at once. Can also be a function taking a group and returning its parallelism.
+* **buffer_size** *(int, optional)* [`1024`]: Maximum number of items the function will buffer into memory while attempting to find an item that can be passed to a worker immediately, all while respecting throttling and group parallelism.
+* **throttle** *(int or float or callable, optional)*: Optional throttle time, in seconds, to wait before processing the next item of a given group. Can also be a function taking last group, item and result and returning next throttle time for this group.
+
+#### #.shutdown
+
+Method used to explicitly shutdown the executor.
+
+*Arguments*
+
+* **wait** *(bool, optional)* [`True`]: Whether to join worker threads, i.e. wait for them to end, when shutting down the executor. Set this to `False` if you need to go on quickly without waiting for your worker threads to end when cleaning up the executor's resources. Just note that if you spawn other thread-intensive tasks or other executors afterwards in rapid succession, you might start too many threads at once.
 
 ### Miscellaneous notes
 
