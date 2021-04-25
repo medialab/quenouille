@@ -165,7 +165,7 @@ class Buffer(object):
             return (
                 len(self.items) == 0 and
                 len(self.worked_groups) == 0 and
-                len(self.throttled_groups) == 0
+                not self.throttled_groups
             )
 
     def __full(self):
@@ -305,11 +305,15 @@ class Buffer(object):
         with self.condition:
             self.condition.notify_all()
 
+    def __cancel_timer(self):
+        self.throttle_timer.cancel()
+        self.throttle_timer.join()
+        self.throttle_timer = None
+
     def __spawn_timer(self, throttle_time):
         if self.throttle_timer is not None:
             if throttle_time < self.throttle_timer.remaining():
-                self.throttle_timer.cancel()
-                self.throttle_timer.join()
+                self.__cancel_timer()
             else:
                 return
 
@@ -361,11 +365,9 @@ class Buffer(object):
 
     def teardown(self):
         if self.throttle_timer is not None:
-            self.throttle_timer.cancel()
-            self.throttle_timer.join()
+            self.__cancel_timer()
 
-        self.throttled_groups = {}
-        self.throttle_timer = None
+        self.throttled_groups = None
 
 
 class OrderedOutputBuffer(object):
