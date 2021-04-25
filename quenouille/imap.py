@@ -841,7 +841,8 @@ class ThreadPoolExecutor(object):
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
-            target=enqueue
+            target=enqueue,
+            daemon=self.daemonic
         )
         dispatcher.start()
 
