@@ -463,22 +463,6 @@ class OrderedOutputBuffer(object):
             self.items[job.index] = job
 
 
-class OutputContext(object):
-    """
-    Context used by an executor imap output generator to ensure we don't forget
-    to cleanup when everything has been processed or when an error was raised.
-    """
-
-    def __init__(self, cleanup):
-        self.cleanup = cleanup
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, *args):
-        self.cleanup(normal_exit=exc_type is None)
-
-
 def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None,
                                wait=None, daemonic=None):
     if max_workers is None:
@@ -811,7 +795,9 @@ class ThreadPoolExecutor(object):
             self.imap_lock.release()
 
         def output():
-            with OutputContext(cleanup):
+            raised = False
+
+            try:
                 while not state.should_stop() and not end_event.is_set():
                     job = self.output_queue.get()
 
@@ -848,6 +834,13 @@ class ThreadPoolExecutor(object):
                     # Cleanup memory and avoid keeping references attached to
                     # ease up garbage collection
                     del job
+
+            except:
+                raised = True
+                raise
+
+            finally:
+                cleanup(not raised)
 
         dispatcher = Thread(
             name='Thread-quenouille-%i-dispatcher' % id(self),
