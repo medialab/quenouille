@@ -493,6 +493,7 @@ class ThreadPoolExecutor(object):
     def __init__(self, max_workers=None, initializer=None, initargs=tuple(),
                  wait=True, daemonic=False):
 
+        # Validation and defaults
         validate_threadpool_kwargs(
             'max_workers',
             max_workers,
@@ -505,24 +506,30 @@ class ThreadPoolExecutor(object):
         if max_workers is None:
             max_workers = get_default_maxworkers()
 
+        # Properties
         self.max_workers = max_workers
         self.wait = wait
         self.daemonic = daemonic
 
+        # Init
         self.initializer = initializer
         self.initargs = list(initargs)
 
+        # Queues
         self.job_queue = Queue(maxsize=max_workers)
         self.output_queue = Queue()
 
+        # Threading
         self.teardown_event = Event()
         self.teardown_lock = Lock()
         self.broken_lock = Lock()
         self.imap_lock = Lock()
         self.boot_barrier = Barrier(max_workers + 1)
 
+        # State
         self.closed = False
 
+        # Thread pool
         self.threads = [
             Thread(
                 name='Thread-quenouille-%i-%i' % (id(self), n),
@@ -532,6 +539,7 @@ class ThreadPoolExecutor(object):
             for n in range(max_workers)
         ]
 
+        # Actual initialization
         try:
             for thread in self.threads:
                 thread.start()
