@@ -135,6 +135,10 @@ class ThrottledGroups(object):
     def __contains__(self, group):
         return group in self.groups
 
+    def __reset(self):
+        self.__cancel_timer()
+        self.groups = {}
+
     def callback(self, fn):
         self.__registered_calback = fn
 
