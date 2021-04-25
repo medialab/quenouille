@@ -119,9 +119,18 @@ class IterationState(object):
 
 
 class ThrottledGroups(object):
-    def __init__(self, throttle=0):
+    """
+    Class representing the groups being currently throttled. It also manages
+    a timer tasked to release groups in the future.
+
+    Note that this class does not use a lock to manage its resources because
+    it is only managed either by the main thread or a Buffer instance which
+    already perform the necessary actions using a lock.
+    """
+    def __init__(self, output_queue, throttle=0):
 
         # Properties
+        self.output_queue = output_queue
         self.throttle = None
         self.update(throttle)
 
@@ -150,9 +159,9 @@ class ThrottledGroups(object):
 
         assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
 
-    def __fire_callback(self, err=None):
+    def __fire_callback(self):
         assert self.__registered_calback is not None
-        self.__registered_calback(err)
+        self.__registered_calback()
 
     def add(self, job: Job):
         throttle_time = self.throttle
@@ -226,10 +235,10 @@ class ThrottledGroups(object):
 
                 self.__spawn_timer(time_to_wait)
 
-            self.__fire_callback(None)
+            self.__fire_callback()
 
         except BaseException as e:
-            self.__fire_callback(e)
+            smash(self.output_queue, e)
 
     def teardown(self):
         if self.timer is not None:
@@ -251,21 +260,16 @@ class Buffer(object):
     Its #.put method will never block and should raise if putting the buffer
     into an incoherent state.
     """
-    def __init__(self, output_queue, throttled_groups, maxsize=1, parallelism=1):
+    def __init__(self, throttled_groups, maxsize=1, parallelism=1):
 
         # Properties
-        self.output_queue = output_queue
         self.throttled_groups = throttled_groups
         self.maxsize = maxsize
         self.parallelism = parallelism
 
         assert isinstance(self.parallelism, int) or callable(self.parallelism)
 
-        def throttle_callback(err):
-            if err is not None:
-                smash(self.output_queue, err)
-                return
-
+        def throttle_callback():
             with self.condition:
                 self.condition.notify_all()
 
@@ -555,7 +559,6 @@ class ThreadPoolExecutor(object):
         self.max_workers = max_workers
         self.wait = wait
         self.daemonic = daemonic
-        self.throttled_groups = ThrottledGroups()
 
         # Init
         self.initializer = initializer
@@ -566,6 +569,7 @@ class ThreadPoolExecutor(object):
         self.output_queue = Queue()
 
         # Threading
+        self.throttled_groups = ThrottledGroups(self.output_queue)
         self.teardown_event = Event()
         self.teardown_lock = Lock()
         self.broken_lock = Lock()
@@ -708,7 +712,6 @@ class ThreadPoolExecutor(object):
         end_event = Event()
         state = IterationState()
         buffer = Buffer(
-            self.output_queue,
             self.throttled_groups,
             maxsize=buffer_size,
             parallelism=parallelism
