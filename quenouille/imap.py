@@ -118,6 +118,122 @@ class IterationState(object):
         )
 
 
+class ThrottledGroups(object):
+    def __init__(self, throttle=0):
+
+        # Properties
+        self.throttle = None
+        self.update(throttle)
+
+        # Containers
+        self.groups = {}
+
+        # Threading
+        self.timer = None
+        self.__registered_calback = None
+
+    def __contains__(self, group):
+        return group in self.groups
+
+    def callback(self, fn):
+        self.__registered_calback = fn
+
+    def detach(self):
+        self.__registered_calback = None
+
+    def update(self, throttle):
+        self.throttle = throttle
+
+        assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
+
+    def __fire_callback(self, err=None):
+        assert self.__registered_calback is not None
+        self.__registered_calback(err)
+
+    def add(self, job: Job):
+        throttle_time = self.throttle
+
+        if callable(self.throttle):
+            throttle_time = self.throttle(
+                job.group,
+                job.item,
+                job.result
+            )
+
+            if throttle_time is None:
+                throttle_time = 0
+
+            if not isinstance(throttle_time, (int, float)) or throttle_time < 0:
+                raise TypeError('callable "throttle" must return numbers >= 0')
+
+        if throttle_time != 0:
+            assert job.group not in self
+
+            self.groups[job.group] = time.time() + throttle_time
+            self.__spawn_timer(throttle_time)
+
+    def __cancel_timer(self):
+        self.timer.cancel()
+        self.timer.join()
+        self.timer = None
+
+    def __spawn_timer(self, throttle_time):
+        if self.timer is not None:
+            if throttle_time < self.timer.remaining():
+                self.__cancel_timer()
+            else:
+                return
+
+        timer = SmartTimer(
+            throttle_time,
+            self.timer_callback
+        )
+
+        self.timer = timer
+        timer.start()
+
+    def timer_callback(self):
+        try:
+            self.timer = None
+            assert len(self.groups) != 0
+
+            groups_to_release = []
+            earliest_next_time = None
+            current_time = time.time()
+
+            for group, release_time in self.groups.items():
+                if current_time >= (release_time - TIMER_EPSILON):
+                    groups_to_release.append(group)
+                else:
+                    if earliest_next_time is None or release_time < earliest_next_time:
+                        earliest_next_time = release_time
+
+            assert len(groups_to_release) > 0
+
+            # Actually releasing the groups
+            for group in groups_to_release:
+                del self.groups[group]
+
+            # Relaunching timer?
+            if earliest_next_time is not None:
+                time_to_wait = earliest_next_time - current_time
+
+                assert time_to_wait >= 0
+
+                self.__spawn_timer(time_to_wait)
+
+            self.__fire_callback(None)
+
+        except BaseException as e:
+            self.__fire_callback(e)
+
+    def teardown(self):
+        if self.timer is not None:
+            self.__cancel_timer()
+
+        self.groups = None
+
+
 class Buffer(object):
     """
     Class tasked with an executor imap buffer where jobs are enqueued when
@@ -131,26 +247,33 @@ class Buffer(object):
     Its #.put method will never block and should raise if putting the buffer
     into an incoherent state.
     """
-    def __init__(self, output_queue, maxsize=1, parallelism=1, throttle=0):
+    def __init__(self, output_queue, throttled_groups, maxsize=1, parallelism=1):
 
         # Properties
         self.output_queue = output_queue
+        self.throttled_groups = throttled_groups
         self.maxsize = maxsize
         self.parallelism = parallelism
-        self.throttle = throttle
 
         assert isinstance(self.parallelism, int) or callable(self.parallelism)
-        assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
+
+        def throttle_callback(err):
+            if err is not None:
+                smash(self.output_queue, err)
+                return
+
+            with self.condition:
+                self.condition.notify_all()
+
+        self.throttled_groups.callback(throttle_callback)
 
         # Threading
         self.condition = Condition()
         self.lock = Lock()
-        self.throttle_timer = None
 
         # Containers
         self.items = OrderedDict()
         self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
-        self.throttled_groups = {}
 
     def __len__(self):
         with self.lock:
@@ -159,13 +282,12 @@ class Buffer(object):
     def is_clean(self):
         """
         This function is only used after an imap is over to ensure no
-        dangling resource could be found.
+        dangling resources could be found.
         """
         with self.lock:
             return (
                 len(self.items) == 0 and
-                len(self.worked_groups) == 0 and
-                not self.throttled_groups
+                len(self.worked_groups) == 0
             )
 
     def __full(self):
@@ -281,93 +403,10 @@ class Buffer(object):
             else:
                 self.worked_groups[group] -= 1
 
-            throttle_time = self.throttle
-
-            if callable(self.throttle):
-                throttle_time = self.throttle(
-                    job.group,
-                    job.item,
-                    job.result
-                )
-
-                if throttle_time is None:
-                    throttle_time = 0
-
-                if not isinstance(throttle_time, (int, float)) or throttle_time < 0:
-                    raise TypeError('callable "throttle" must return numbers >= 0')
-
-            if throttle_time != 0:
-                assert group not in self.throttled_groups
-
-                self.throttled_groups[group] = time.time() + throttle_time
-                self.__spawn_timer(throttle_time)
+            self.throttled_groups.add(job)
 
         with self.condition:
             self.condition.notify_all()
-
-    def __cancel_timer(self):
-        self.throttle_timer.cancel()
-        self.throttle_timer.join()
-        self.throttle_timer = None
-
-    def __spawn_timer(self, throttle_time):
-        if self.throttle_timer is not None:
-            if throttle_time < self.throttle_timer.remaining():
-                self.__cancel_timer()
-            else:
-                return
-
-        timer = SmartTimer(
-            throttle_time,
-            self.timer_callback
-        )
-
-        self.throttle_timer = timer
-        timer.start()
-
-    def timer_callback(self):
-        try:
-            with self.lock:
-                self.throttle_timer = None
-                assert len(self.throttled_groups) != 0
-
-                groups_to_release = []
-                earliest_next_time = None
-                current_time = time.time()
-
-                for group, release_time in self.throttled_groups.items():
-                    if current_time >= (release_time - TIMER_EPSILON):
-                        groups_to_release.append(group)
-                    else:
-                        if earliest_next_time is None or release_time < earliest_next_time:
-                            earliest_next_time = release_time
-
-                assert len(groups_to_release) > 0
-
-                # Actually releasing the groups
-                for group in groups_to_release:
-                    del self.throttled_groups[group]
-
-                # Relaunching timer?
-                if earliest_next_time is not None:
-                    time_to_wait = earliest_next_time - current_time
-
-                    assert time_to_wait >= 0
-
-                    self.__spawn_timer(time_to_wait)
-
-            # Notifying waiters
-            with self.condition:
-                self.condition.notify_all()
-
-        except BaseException as e:
-            smash(self.output_queue, e)
-
-    def teardown(self):
-        if self.throttle_timer is not None:
-            self.__cancel_timer()
-
-        self.throttled_groups = None
 
 
 class OrderedOutputBuffer(object):
@@ -512,6 +551,7 @@ class ThreadPoolExecutor(object):
         self.max_workers = max_workers
         self.wait = wait
         self.daemonic = daemonic
+        self.throttled_groups = ThrottledGroups()
 
         # Init
         self.initializer = initializer
@@ -577,6 +617,9 @@ class ThreadPoolExecutor(object):
 
             # Clearing the ouput queue since we won't be iterating anymore
             self.__clear_output_queue()
+
+            # Clearing throttling state
+            self.throttled_groups.teardown()
 
             # Waiting for worker threads to end
             if wait:
@@ -653,14 +696,15 @@ class ThreadPoolExecutor(object):
             iterator = ThreadSafeIterator(iterable)
 
         # State
+        self.throttled_groups.update(throttle)
         job_counter = count()
         end_event = Event()
         state = IterationState()
         buffer = Buffer(
             self.output_queue,
+            self.throttled_groups,
             maxsize=buffer_size,
-            parallelism=parallelism,
-            throttle=throttle
+            parallelism=parallelism
         )
         ordered_output_buffer = OrderedOutputBuffer()
 
@@ -731,13 +775,13 @@ class ThreadPoolExecutor(object):
             # Clearing the ouput queue since we won't be iterating anymore
             self.__clear_output_queue()
 
-            # Cleanup buffer to remove dangling timers
-            buffer.teardown()
-
             # Sanity tests
             if normal_exit:
                 assert buffer.is_clean()
                 assert ordered_output_buffer.is_clean()
+
+            # Detaching timer callback
+            self.throttled_groups.detach()
 
             # Making sure we are getting rid of the dispatcher thread
             dispatcher.join()
