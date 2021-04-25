@@ -131,8 +131,8 @@ class ThrottledGroups(object):
 
         # Properties
         self.output_queue = output_queue
-        self.throttle = None
-        self.update(throttle)
+        self.throttle = throttle
+        self.identity = None
 
         # Containers
         self.groups = {}
@@ -154,7 +154,15 @@ class ThrottledGroups(object):
     def detach(self):
         self.__registered_calback = None
 
-    def update(self, throttle):
+    def update(self, key, throttle):
+        assert key is None or callable(key)
+
+        new_identity = id(key)
+
+        if new_identity != self.identity:
+            self.__reset()
+
+        self.identity = new_identity
         self.throttle = throttle
 
         assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
@@ -186,8 +194,14 @@ class ThrottledGroups(object):
             self.__spawn_timer(throttle_time)
 
     def __cancel_timer(self):
+        if self.timer is None:
+            return
+
         self.timer.cancel()
-        self.timer.join()
+
+        if self.timer.is_alive():
+            self.timer.join()
+
         self.timer = None
 
     def __spawn_timer(self, throttle_time):
@@ -241,9 +255,7 @@ class ThrottledGroups(object):
             smash(self.output_queue, e)
 
     def teardown(self):
-        if self.timer is not None:
-            self.__cancel_timer()
-
+        self.__cancel_timer()
         self.groups = None
 
 
@@ -707,7 +719,7 @@ class ThreadPoolExecutor(object):
             iterator = ThreadSafeIterator(iterable)
 
         # State
-        self.throttled_groups.update(throttle)
+        self.throttled_groups.update(key, throttle)
         job_counter = count()
         end_event = Event()
         state = IterationState()
