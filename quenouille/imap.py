@@ -808,9 +808,6 @@ class ThreadPoolExecutor(object):
                     if isinstance(job, BaseException):
                         raise job
 
-                    # Releasing task in output queue
-                    self.output_queue.task_done()
-
                     # Unregistering job in buffer to let other threads continue working
                     buffer.unregister_job(job)
 
