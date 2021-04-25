@@ -202,7 +202,7 @@ Method used to explicitly shutdown the executor.
 
 The `imap` functions consider the `None` group (this can happen if your `key` function returns `None`) as special and will always consider the attached items can be processed right away without parallelism constraints nor throttle.
 
-Without `key`, all items are considered to belong to the `None` group.
+Without `key`, all items are considered as belonging to the `None` group.
 
 #### Parallelism > workers
 
