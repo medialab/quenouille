@@ -658,15 +658,18 @@ class ThreadPoolExecutor(object):
         # Thread job consumer
         try:
             while not self.teardown_event.is_set():
-                job = self.job_queue.get()
+                try:
+                    job = self.job_queue.get()
 
-                # Signaling we must tear down the worker thread
-                if job is THE_END_IS_NIGH:
+                    # Signaling we must tear down the worker thread
+                    if job is THE_END_IS_NIGH:
+                        break
+
+                    # Actually performing the given task
+                    job()
+
+                finally:
                     self.job_queue.task_done()
-                    break
-
-                job()
-                self.job_queue.task_done()
 
                 assert self.output_queue is not None
                 self.output_queue.put(job)
