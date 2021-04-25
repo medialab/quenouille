@@ -30,7 +30,7 @@ pip install quenouille
   * [Adding entropy to throttle](#adding-entropy-to-throttle)
   * [Caveats of using imap with queues](#caveats-of-using-imap-with-queues)
 
-### imap_unordered, imap
+### imap, imap_unordered
 
 Function lazily consuming an iterable and applying the desired function over the yielded items in a multithreaded fashion.
 
@@ -166,6 +166,8 @@ executor = ThreadPoolExecutor()
 executor.imap(range(10), worker)
 executor.shutdown(wait=False)
 ```
+
+Note that your throttling state is kept between multiple `imap` and `imap_unordered` calls so you don't end up perform some tasks too soon. But keep in mind this state is tied to the `key` function you provide to remain consistent, so if you change the used `key`, the throttling state will be reset.
 
 *Arguments*
 
