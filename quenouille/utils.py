@@ -177,3 +177,6 @@ class NamedLocks(object):
                 return lock
 
             return self.locks[key]
+
+    def __call__(self, key):
+        return self[key]
