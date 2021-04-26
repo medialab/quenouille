@@ -19,7 +19,6 @@ from quenouille.utils import (
     smash,
     is_queue,
     get_default_maxworkers,
-    ThreadSafeIterator,
     SmartTimer
 )
 from quenouille.constants import (
@@ -700,7 +699,7 @@ class ThreadPoolExecutor(object):
         iterable_is_queue = is_queue(iterable)
 
         if not iterable_is_queue:
-            iterator = ThreadSafeIterator(iterable)
+            iterator = iter(iterable)
 
         # State
         self.throttled_groups.update(key, throttle)
