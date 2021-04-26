@@ -149,11 +149,11 @@ class SmartTimer(Timer):
 
 
 class NamedLock(object):
-    __slots__ = ('key', '__parent', '__lock')
+    __slots__ = ('key', '__owner', '__lock')
 
-    def __init__(self, parent, key, lock):
+    def __init__(self, owner, key, lock):
         self.key = key
-        self.__parent = parent
+        self.__owner = owner
         self.__lock = lock
 
     def __repr__(self):
@@ -167,7 +167,7 @@ class NamedLock(object):
         return self.__lock.acquire()
 
     def release(self):
-        self.__parent.release(self.key)
+        self.__owner.release(self.key)
         self.__lock.release()
 
     def locked(self):
