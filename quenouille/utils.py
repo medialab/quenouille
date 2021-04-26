@@ -146,3 +146,78 @@ class SmartTimer(Timer):
 
     def remaining(self):
         return self.interval - self.elapsed()
+
+
+class NamedLock(object):
+    __slots__ = ('key', '__parent', '__lock')
+
+    def __init__(self, parent, key, lock):
+        self.key = key
+        self.__parent = parent
+        self.__lock = lock
+
+    def __repr__(self):
+        return '<{name} key={key!r} lock={id!r}>'.format(
+            name=self.__class__.__name__,
+            key=self.key,
+            id=id(self.__lock)
+        )
+
+    def acquire(self):
+        return self.__lock.acquire()
+
+    def release(self):
+        self.__parent.release(self.key)
+        self.__lock.release()
+
+    def locked(self):
+        return self.__lock.locked()
+
+    def __enter__(self):
+        self.acquire()
+        return self
+
+    def __exit__(self, *args):
+        self.release()
+
+
+class NamedLocks(object):
+    def __init__(self):
+        self.own_lock = Lock()
+        self.locks = {}
+        self.counts = {}
+
+    def __repr__(self):
+        with self.own_lock:
+            return '<{name} acquired={acquired!r}>'.format(
+                name=self.__class__.__name__,
+                acquired=[(k, v, id(self.locks[k])) for k, v in self.counts.items()]
+            )
+
+    def __len__(self):
+        with self.own_lock:
+            return len(self.locks)
+
+    def __contains__(self, key):
+        with self.own_lock:
+            return key in self.locks
+
+    def release(self, key):
+        with self.own_lock:
+            if self.counts[key] == 1:
+                del self.locks[key]
+                del self.counts[key]
+            else:
+                self.counts[key] -= 1
+
+    def __getitem__(self, key):
+        with self.own_lock:
+            if key in self.locks:
+                self.counts[key] += 1
+                lock = self.locks[key]
+            else:
+                lock = Lock()
+                self.counts[key] = 1
+                self.locks[key] = lock
+
+            return NamedLock(self, key, lock)

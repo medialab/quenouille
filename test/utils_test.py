@@ -6,8 +6,7 @@ import pytest
 from queue import Queue
 from collections import Counter
 
-from quenouille import QueueIterator
-from quenouille.utils import is_queue
+from quenouille.utils import is_queue, QueueIterator, NamedLocks
 
 
 class TestUtils(object):
@@ -65,3 +64,34 @@ class TestUtils(object):
             3: 4,
             4: 4
         }
+
+    def test_named_locks(self):
+        locks = NamedLocks()
+
+        assert len(locks) == 0
+
+        one_lock = locks['one']
+        two_lock = locks['two']
+
+        assert len(locks) == 2
+
+        assert not one_lock.locked()
+        assert not two_lock.locked()
+
+        other_one_lock = locks['one']
+
+        assert locks.counts['one'] == 2
+
+        with one_lock:
+            assert other_one_lock.locked()
+
+        assert not other_one_lock.locked()
+
+        assert locks.counts['two'] == 1
+
+        other_one_lock.acquire()
+        two_lock.acquire()
+        two_lock.release()
+        other_one_lock.release()
+
+        assert len(locks) == 0
