@@ -168,7 +168,7 @@ class NamedLock(object):
 
     def release(self):
         self.__owner.release(self.key)
-        self.__lock.release()
+        return self.__lock.release()
 
     def locked(self):
         return self.__lock.locked()
