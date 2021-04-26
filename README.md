@@ -22,6 +22,7 @@ pip install quenouille
 * [ThreadPoolExecutor](#threadpoolexecutor)
   * [#.imap, #.imap_unordered](#executor-imap)
   * [#.shutdown](#shutdown)
+* [NamedLocks](#namedlocks)
 * [Miscellaneous notes](#miscellaneous-notes)
   * [The None group](#the-none-group)
   * [Parallelism > workers](#parallelism--workers)
@@ -195,6 +196,21 @@ Method used to explicitly shutdown the executor.
 *Arguments*
 
 * **wait** *(bool, optional)* [`True`]: Whether to join worker threads, i.e. wait for them to end, when shutting down the executor. Set this to `False` if you need to go on quickly without waiting for your worker threads to end when cleaning up the executor's resources. Just note that if you spawn other thread-intensive tasks or other executors afterwards in rapid succession, you might start too many threads at once.
+
+### NamedLocks
+
+A weakref dictionary of locks useful to make some tasks based on keys threadsafe, e.g. if you need to ensure that two threads will not be writing to the same file at once.
+
+```python
+from quenouille import NamedLocks
+
+locks = NamedLocks()
+
+def worker(filename):
+  with locks[filename]:
+    with open(filename, 'a+') as f:
+      f.write('hello\n')
+```
 
 ### Miscellaneous notes
 
