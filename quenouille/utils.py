@@ -7,6 +7,7 @@
 import os
 import time
 from threading import Lock, Condition, Timer
+from weakref import WeakValueDictionary
 from queue import Empty, Full
 
 
@@ -148,50 +149,16 @@ class SmartTimer(Timer):
         return self.interval - self.elapsed()
 
 
-class NamedLock(object):
-    __slots__ = ('key', '__owner', '__lock')
-
-    def __init__(self, owner, key, lock):
-        self.key = key
-        self.__owner = owner
-        self.__lock = lock
-
-    def __repr__(self):
-        return '<{name} key={key!r} lock={id!r}>'.format(
-            name=self.__class__.__name__,
-            key=self.key,
-            id=id(self.__lock)
-        )
-
-    def acquire(self):
-        return self.__lock.acquire()
-
-    def release(self):
-        self.__owner.release(self.key)
-        return self.__lock.release()
-
-    def locked(self):
-        return self.__lock.locked()
-
-    def __enter__(self):
-        self.acquire()
-        return self
-
-    def __exit__(self, *args):
-        self.release()
-
-
 class NamedLocks(object):
     def __init__(self):
         self.own_lock = Lock()
-        self.locks = {}
-        self.counts = {}
+        self.locks = WeakValueDictionary()
 
     def __repr__(self):
         with self.own_lock:
             return '<{name} acquired={acquired!r}>'.format(
                 name=self.__class__.__name__,
-                acquired=[(k, v, id(self.locks[k])) for k, v in self.counts.items()]
+                acquired=list(self.locks)
             )
 
     def __len__(self):
@@ -202,22 +169,11 @@ class NamedLocks(object):
         with self.own_lock:
             return key in self.locks
 
-    def release(self, key):
-        with self.own_lock:
-            if self.counts[key] == 1:
-                del self.locks[key]
-                del self.counts[key]
-            else:
-                self.counts[key] -= 1
-
     def __getitem__(self, key):
         with self.own_lock:
-            if key in self.locks:
-                self.counts[key] += 1
-                lock = self.locks[key]
-            else:
+            if key not in self.locks:
                 lock = Lock()
-                self.counts[key] = 1
                 self.locks[key] = lock
+                return lock
 
-            return NamedLock(self, key, lock)
+            return self.locks[key]

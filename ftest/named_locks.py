@@ -7,7 +7,10 @@ DATA = [('A', 1), ('B', 2), ('B', 3)]
 locks = NamedLocks()
 
 def worker(t):
-    with locks[t[0]]:
+    lock = locks[t[0]]
+    print(t, lock)
+
+    with lock:
         time.sleep(3)
         return t
 

@@ -80,18 +80,18 @@ class TestUtils(object):
 
         other_one_lock = locks['one']
 
-        assert locks.counts['one'] == 2
-
         with one_lock:
             assert other_one_lock.locked()
 
         assert not other_one_lock.locked()
 
-        assert locks.counts['two'] == 1
-
         other_one_lock.acquire()
         two_lock.acquire()
         two_lock.release()
         other_one_lock.release()
+
+        del one_lock
+        del two_lock
+        del other_one_lock
 
         assert len(locks) == 0
