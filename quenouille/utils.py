@@ -6,7 +6,7 @@
 #
 import os
 import time
-from threading import Lock, Condition, Timer
+from threading import Lock, Timer
 from weakref import WeakValueDictionary
 from queue import Empty, Full
 
