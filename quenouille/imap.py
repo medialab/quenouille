@@ -789,7 +789,9 @@ class ThreadPoolExecutor(object):
             self.throttled_groups.detach()
 
             # Making sure we are getting rid of the dispatcher thread
-            dispatcher.join()
+            if self.wait:
+                if dispatcher.is_alive():
+                    dispatcher.join()
 
             self.imap_lock.release()
 
