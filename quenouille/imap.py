@@ -234,7 +234,14 @@ class ThrottledGroups(object):
                     if earliest_next_time is None or release_time < earliest_next_time:
                         earliest_next_time = release_time
 
-            assert len(groups_to_release) > 0
+            # NOTE: except for exotic race conditions that I did not foresee
+            # this assertion should never fail because it is logically the same
+            # as the one above, testing that groups are not empty.
+            # NOTE: because of some timer precision issues that can arise
+            # sometimes (in spite of the epsilon), this callback can be
+            # a noop, in which case it should just respawn the timer until the
+            # next suitable time.
+            assert len(groups_to_release) > 0 or earliest_next_time is not None
 
             # Actually releasing the groups
             for group in groups_to_release:
@@ -248,7 +255,9 @@ class ThrottledGroups(object):
 
                 self.__spawn_timer(time_to_wait)
 
-            self.__fire_callback()
+            # NOTE: this condition is related to the explanation above
+            if groups_to_release:
+                self.__fire_callback()
 
         except BaseException as e:
             smash(self.output_queue, e)
