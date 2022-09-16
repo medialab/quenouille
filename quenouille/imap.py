@@ -535,7 +535,7 @@ class ThreadPoolExecutor(object):
             for instance.
         initargs (iterable, optional): Arguments to pass to the thread initializer
             function.
-        join (bool, optional): Whether to join worker threads on executor teardown.
+        wait (bool, optional): Whether to join worker threads on executor teardown.
             Defaults to True.
         daemonic (bool, optional): Whether to spawn daemon worker threads.
             Defaults to False.
