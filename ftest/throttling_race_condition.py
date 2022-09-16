@@ -17,7 +17,7 @@ def group(_):
 for i in imap_unordered(
     DATA,
     work,
-    # key=group,
+    key=group,
     # parallelism=1,
     # throttle=0.2,
     # threads=25,

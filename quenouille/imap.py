@@ -299,6 +299,7 @@ class Buffer(object):
         # Threading
         self.condition = Condition()
         self.lock = Lock()
+        self.teardown_event = Event()
 
         # Containers
         self.items = OrderedDict()
@@ -307,6 +308,15 @@ class Buffer(object):
     def __len__(self):
         with self.lock:
             return len(self.items)
+
+    def teardown(self):
+        self.teardown_event.set()
+
+        with self.condition:
+            self.condition.notify_all()
+
+        del self.items
+        del self.worked_groups
 
     def is_clean(self):
         """
@@ -376,7 +386,7 @@ class Buffer(object):
             self.items[id(job)] = job
 
     def get(self):
-        while True:
+        while not self.teardown_event.is_set():
             self.lock.acquire()
 
             if len(self.items) == 0:
@@ -792,6 +802,8 @@ class ThreadPoolExecutor(object):
             if normal_exit:
                 assert buffer.is_clean()
                 assert ordered_output_buffer.is_clean()
+            else:
+                buffer.teardown()
 
             # Detaching timer callback
             self.throttled_groups.detach()
