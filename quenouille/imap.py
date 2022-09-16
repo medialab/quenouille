@@ -401,8 +401,6 @@ class Buffer(object):
             self.lock.release()
             return None
 
-        raise RuntimeError
-
     def register_job(self, job: Job):
         with self.lock:
             group = job.group
