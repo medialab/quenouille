@@ -151,6 +151,7 @@ class ThrottledGroups(object):
         self.__registered_calback = fn
 
     def detach(self):
+        self.__reset()
         self.__registered_calback = None
 
     def update(self, key, throttle):
