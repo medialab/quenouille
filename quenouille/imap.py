@@ -926,10 +926,12 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
         throttle=throttle
     )
 
-    if isinstance(iterable, Sized):
+    # If we know the size of the iterable, and this size is less than the
+    # number of desired threads, we adjust the number of threads accordingly
+    if threads is not None and isinstance(iterable, Sized):
         threads = min(
             len(iterable),
-            threads or float('inf')
+            threads
         )
 
     def generator():
