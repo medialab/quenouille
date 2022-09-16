@@ -222,7 +222,13 @@ class ThrottledGroups(object):
     def timer_callback(self):
         try:
             self.timer = None
-            assert len(self.groups) != 0
+
+            # NOTE: because of timing precision issues and in some weird race
+            # conditions beyond my understanding, this callback may fire
+            # even when no groups remain to be throttled. In this case we just
+            # let this callback be a noop.
+            if len(self.groups) == 0:
+                return
 
             groups_to_release = []
             earliest_next_time = None
