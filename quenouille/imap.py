@@ -167,10 +167,6 @@ class ThrottledGroups(object):
 
         assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
 
-    def __fire_callback(self):
-        assert self.__registered_calback is not None
-        self.__registered_calback()
-
     def add(self, job: Job):
         throttle_time = self.throttle
 
@@ -264,7 +260,8 @@ class ThrottledGroups(object):
 
             # NOTE: this condition is related to the explanation above
             if groups_to_release:
-                self.__fire_callback()
+                assert self.__registered_calback is not None
+                self.__registered_calback(len(groups_to_release))
 
         except BaseException as e:
             smash(self.output_queue, e)
@@ -296,9 +293,9 @@ class Buffer(object):
 
         assert isinstance(self.parallelism, int) or callable(self.parallelism)
 
-        def throttle_callback():
+        def throttle_callback(n):
             with self.condition:
-                self.condition.notify_all()
+                self.condition.notify(n)
 
         self.throttled_groups.callback(throttle_callback)
 
@@ -449,7 +446,7 @@ class Buffer(object):
             self.throttled_groups.add(job)
 
         with self.condition:
-            self.condition.notify_all()
+            self.condition.notify()
 
 
 class OrderedOutputBuffer(object):
