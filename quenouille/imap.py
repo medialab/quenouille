@@ -4,6 +4,8 @@
 #
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
+from typing import Generic, TypeVar, Optional, Hashable, Callable, Dict
+
 import sys
 import time
 from queue import Queue, Empty
@@ -23,23 +25,33 @@ from quenouille.utils import (
 )
 from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPSILON
 
+ItemType = TypeVar("ItemType")
+GroupType = TypeVar("GroupType", bound=Optional[Hashable])
+ResultType = TypeVar("ResultType")
 
-class Job(object):
+
+class Job(Generic[ItemType, GroupType, ResultType]):
     """
     Class representing a job to be performed by a worker thread.
     """
 
     __slots__ = ("func", "item", "index", "group", "result", "exc_info")
 
-    def __init__(self, func, item, index=None, group=None):
-        self.func = func
-        self.item = item
-        self.index = index
-        self.group = group
-        self.result = None
+    def __init__(
+        self,
+        func: Callable[[ItemType], ResultType],
+        item: ItemType,
+        index: int,
+        group: GroupType = None,
+    ):
+        self.func = func  # type: Callable[[ItemType], ResultType]
+        self.item = item  # type: ItemType
+        self.index = index  # type: int
+        self.group = group  # type: GroupType
+        self.result = None  # type: Optional[ResultType]
         self.exc_info = None
 
-    def __call__(self):
+    def __call__(self) -> None:
         try:
             self.result = self.func(self.item)
         except BaseException as e:
@@ -68,40 +80,40 @@ class IterationState(object):
     """
 
     def __init__(self):
-        self.lock = Lock()
-        self.started_count = 0
-        self.finished_count = 0
-        self.finished = False
-        self.task_is_finished = Condition()
+        self.lock = Lock()  # type: Lock
+        self.started_count = 0  # type: int
+        self.finished_count = 0  # type: int
+        self.finished = False  # type: bool
+        self.task_is_finished = Condition()  # type: Condition
 
-    def start_task(self):
+    def start_task(self) -> None:
         with self.lock:
             self.started_count += 1
 
-    def finish_task(self):
+    def finish_task(self) -> None:
         with self.lock:
             self.finished_count += 1
 
         with self.task_is_finished:
             self.task_is_finished.notify_all()
 
-    def wait_for_any_task_to_finish(self):
+    def wait_for_any_task_to_finish(self) -> None:
         with self.task_is_finished:
             self.task_is_finished.wait()
 
-    def has_running_tasks(self):
+    def has_running_tasks(self) -> bool:
         with self.lock:
             return self.started_count > self.finished_count
 
-    def declare_end(self):
+    def declare_end(self) -> bool:
         with self.lock:
             self.finished = True
             return self.__should_stop()
 
-    def __should_stop(self):
+    def __should_stop(self) -> bool:
         return self.finished and self.finished_count == self.started_count
 
-    def should_stop(self):
+    def should_stop(self) -> bool:
         with self.lock:
             return self.__should_stop()
 
@@ -114,7 +126,7 @@ class IterationState(object):
         )
 
 
-class ThrottledGroups(object):
+class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
     """
     Class representing the groups being currently throttled. It also manages
     a timer tasked to release groups in the future.
@@ -124,34 +136,34 @@ class ThrottledGroups(object):
     already perform the necessary actions using a lock.
     """
 
-    def __init__(self, output_queue, throttle=0):
+    def __init__(self, output_queue: Queue, throttle: float = 0):
         # Properties
-        self.output_queue = output_queue
-        self.throttle = throttle
-        self.identity = None
+        self.output_queue = output_queue  # type: Queue
+        self.throttle = throttle  # type: float
+        self.identity = None  # type: Optional[int]
 
         # Containers
-        self.groups = {}
+        self.groups = {}  # type: Dict[GroupType, float]
 
         # Threading
-        self.timer = None
-        self.__registered_calback = None
+        self.timer = None  # type: Optional[SmartTimer]
+        self.__registered_calback = None  # type: Optional[Callable[[int], None]]
 
-    def __contains__(self, group):
+    def __contains__(self, group: GroupType) -> bool:
         return group in self.groups
 
-    def __reset(self):
+    def __reset(self) -> None:
         self.__cancel_timer()
         self.groups = {}
 
-    def callback(self, fn):
+    def callback(self, fn: Callable[[int], None]) -> None:
         self.__registered_calback = fn
 
-    def detach(self):
+    def detach(self) -> None:
         self.__reset()
         self.__registered_calback = None
 
-    def update(self, key, throttle):
+    def update(self, key, throttle: float) -> None:
         assert key is None or callable(key)
 
         new_identity = id(key)
@@ -164,7 +176,7 @@ class ThrottledGroups(object):
 
         assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
 
-    def add(self, job: Job):
+    def add(self, job: Job[ItemType, GroupType, ResultType]) -> None:
         throttle_time = self.throttle
 
         if callable(self.throttle):
@@ -182,7 +194,7 @@ class ThrottledGroups(object):
             self.groups[job.group] = time.time() + throttle_time
             self.__spawn_timer(throttle_time)
 
-    def __cancel_timer(self):
+    def __cancel_timer(self) -> None:
         if self.timer is None:
             return
 
@@ -193,7 +205,7 @@ class ThrottledGroups(object):
 
         self.timer = None
 
-    def __spawn_timer(self, throttle_time):
+    def __spawn_timer(self, throttle_time: float) -> None:
         if self.timer is not None:
             if throttle_time < self.timer.remaining():
                 self.__cancel_timer()
@@ -205,7 +217,7 @@ class ThrottledGroups(object):
         self.timer = timer
         timer.start()
 
-    def timer_callback(self):
+    def timer_callback(self) -> None:
         try:
             self.timer = None
 
@@ -256,9 +268,9 @@ class ThrottledGroups(object):
         except BaseException as e:
             smash(self.output_queue, e)
 
-    def teardown(self):
+    def teardown(self) -> None:
         self.__cancel_timer()
-        self.groups = None
+        del self.groups
 
 
 class Buffer(object):
