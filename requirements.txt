@@ -1,7 +1,6 @@
 # Dev Dependencies
-importchecker==2.0
-pycodestyle==2.4.0
-pylint==2.2.2
-pytest==3.5.1
-twine==1.11.0
-wheel==0.33.1
+black; python_version >= '3.7'
+importchecker
+pytest
+twine
+wheel

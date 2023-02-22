@@ -8,21 +8,21 @@ jobs:
       matrix:
         include:
 
-          # Old ubuntu
-          - os: ubuntu-18.04
-            python-version: "3.6"
-
-          # Current ubuntu
-          - os: ubuntu-latest
+          # Ubuntu
+          - os: ubuntu-20.04
             python-version: "3.5"
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             python-version: "3.6"
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             python-version: "3.7"
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             python-version: "3.8"
-          - os: ubuntu-latest
+          - os: ubuntu-20.04
             python-version: "3.9"
+          - os: ubuntu-20.04
+            python-version: "3.10"
+          - os: ubuntu-20.04
+            python-version: "3.11"
 
           # Mac
           - os: macos-10.15

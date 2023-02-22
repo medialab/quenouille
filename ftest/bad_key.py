@@ -3,11 +3,11 @@ from quenouille import imap_unordered
 
 
 def key(i):
-    print('Grouped', i)
+    print("Grouped", i)
     if i == 5:
         raise RuntimeError
 
-    return 'A'
+    return "A"
 
 
 def worker(i):
@@ -16,4 +16,4 @@ def worker(i):
 
 
 for i in imap_unordered(range(10), worker, 3, group=key, group_parallelism=2):
-    print('Got ', i)
+    print("Got ", i)

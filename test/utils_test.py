@@ -20,15 +20,15 @@ class TestUtils(object):
 
         assert len(locks) == 0
 
-        one_lock = locks['one']
-        two_lock = locks['two']
+        one_lock = locks["one"]
+        two_lock = locks["two"]
 
         assert len(locks) == 2
 
         assert not one_lock.locked()
         assert not two_lock.locked()
 
-        other_one_lock = locks['one']
+        other_one_lock = locks["one"]
 
         with one_lock:
             assert other_one_lock.locked()

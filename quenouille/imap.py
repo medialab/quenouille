@@ -19,13 +19,9 @@ from quenouille.utils import (
     smash,
     is_queue,
     get_default_maxworkers,
-    SmartTimer
+    SmartTimer,
 )
-from quenouille.constants import (
-    THE_END_IS_NIGH,
-    DEFAULT_BUFFER_SIZE,
-    TIMER_EPSILON
-)
+from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPSILON
 
 
 class Job(object):
@@ -33,7 +29,7 @@ class Job(object):
     Class representing a job to be performed by a worker thread.
     """
 
-    __slots__ = ('func', 'item', 'index', 'group', 'result', 'exc_info')
+    __slots__ = ("func", "item", "index", "group", "result", "exc_info")
 
     def __init__(self, func, item, index=None, group=None):
         self.func = func
@@ -47,19 +43,20 @@ class Job(object):
         try:
             self.result = self.func(self.item)
         except BaseException as e:
-
             # We catch the exception before flushing downstream to be
             # sure the job can be passed down the line but it might not be
             # the best thing to do. Time will tell...
             self.exc_info = sys.exc_info()
 
     def __repr__(self):
-        return '<{name} id={id!r} index={index!r} group={group!r} item={item!r}>'.format(
-            name=self.__class__.__name__,
-            index=self.index,
-            group=self.group,
-            item=self.item,
-            id=id(self)
+        return (
+            "<{name} id={id!r} index={index!r} group={group!r} item={item!r}>".format(
+                name=self.__class__.__name__,
+                index=self.index,
+                group=self.group,
+                item=self.item,
+                id=id(self),
+            )
         )
 
 
@@ -109,11 +106,11 @@ class IterationState(object):
             return self.__should_stop()
 
     def __repr__(self):
-        return '<{name}{finished} started={started!r} done={done!r}>'.format(
+        return "<{name}{finished} started={started!r} done={done!r}>".format(
             name=self.__class__.__name__,
-            finished=(' finished' if self.finished else ''),
+            finished=(" finished" if self.finished else ""),
             started=self.started_count,
-            done=self.finished_count
+            done=self.finished_count,
         )
 
 
@@ -126,8 +123,8 @@ class ThrottledGroups(object):
     it is only managed either by the main thread or a Buffer instance which
     already perform the necessary actions using a lock.
     """
-    def __init__(self, output_queue, throttle=0):
 
+    def __init__(self, output_queue, throttle=0):
         # Properties
         self.output_queue = output_queue
         self.throttle = throttle
@@ -171,11 +168,7 @@ class ThrottledGroups(object):
         throttle_time = self.throttle
 
         if callable(self.throttle):
-            throttle_time = self.throttle(
-                job.group,
-                job.item,
-                job.result
-            )
+            throttle_time = self.throttle(job.group, job.item, job.result)
 
             if throttle_time is None:
                 throttle_time = 0
@@ -207,10 +200,7 @@ class ThrottledGroups(object):
             else:
                 return
 
-        timer = SmartTimer(
-            throttle_time,
-            self.timer_callback
-        )
+        timer = SmartTimer(throttle_time, self.timer_callback)
 
         self.timer = timer
         timer.start()
@@ -284,8 +274,8 @@ class Buffer(object):
     Its #.put method will never block and should raise if putting the buffer
     into an incoherent state.
     """
-    def __init__(self, throttled_groups, maxsize=1, parallelism=1):
 
+    def __init__(self, throttled_groups, maxsize=1, parallelism=1):
         # Properties
         self.throttled_groups = throttled_groups
         self.maxsize = maxsize
@@ -327,10 +317,7 @@ class Buffer(object):
         dangling resources could be found.
         """
         with self.lock:
-            return (
-                len(self.items) == 0 and
-                len(self.worked_groups) == 0
-            )
+            return len(self.items) == 0 and len(self.worked_groups) == 0
 
     def __full(self):
         count = len(self.items)
@@ -351,7 +338,6 @@ class Buffer(object):
             return self.__empty()
 
     def __can_work(self, job):
-
         # None group is the default and can always be processed without constraints
         if job.group is None:
             return True
@@ -483,8 +469,9 @@ class OrderedOutputBuffer(object):
             self.items[job.index] = job
 
 
-def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initargs=None,
-                               wait=None, daemonic=None):
+def validate_threadpool_kwargs(
+    name, max_workers=None, initializer=None, initargs=None, wait=None, daemonic=None
+):
     if max_workers is None:
         return
 
@@ -504,14 +491,14 @@ def validate_threadpool_kwargs(name, max_workers=None, initializer=None, initarg
         raise TypeError('"daemonic" should be boolean')
 
 
-def validate_imap_kwargs(iterable, func, *, max_workers, key, parallelism, buffer_size,
-                         throttle):
-
+def validate_imap_kwargs(
+    iterable, func, *, max_workers, key, parallelism, buffer_size, throttle
+):
     if not isinstance(iterable, Iterable) and not is_queue(iterable):
-        raise TypeError('target is not iterable nor a queue')
+        raise TypeError("target is not iterable nor a queue")
 
     if not callable(func):
-        raise TypeError('worker function is not callable')
+        raise TypeError("worker function is not callable")
 
     if key is not None and not callable(key):
         raise TypeError('"key" is not callable')
@@ -555,17 +542,22 @@ class ThreadPoolExecutor(object):
             Defaults to False.
     """
 
-    def __init__(self, max_workers=None, initializer=None, initargs=tuple(),
-                 wait=True, daemonic=False):
-
+    def __init__(
+        self,
+        max_workers=None,
+        initializer=None,
+        initargs=tuple(),
+        wait=True,
+        daemonic=False,
+    ):
         # Validation and defaults
         validate_threadpool_kwargs(
-            'max_workers',
+            "max_workers",
             max_workers,
             initializer=initializer,
             initargs=initargs,
             wait=wait,
-            daemonic=daemonic
+            daemonic=daemonic,
         )
 
         if max_workers is None:
@@ -598,9 +590,9 @@ class ThreadPoolExecutor(object):
         # Thread pool
         self.threads = [
             Thread(
-                name='Thread-quenouille-%i-%i' % (id(self), n),
+                name="Thread-quenouille-%i-%i" % (id(self), n),
                 target=self.__worker,
-                daemon=self.daemonic
+                daemon=self.daemonic,
             )
             for n in range(max_workers)
         ]
@@ -622,7 +614,7 @@ class ThreadPoolExecutor(object):
 
     def __enter__(self):
         if self.closed:
-            raise RuntimeError('cannot re-enter a closed executor')
+            raise RuntimeError("cannot re-enter a closed executor")
 
         return self
 
@@ -666,7 +658,6 @@ class ThreadPoolExecutor(object):
         flush(self.job_queue, n, THE_END_IS_NIGH)
 
     def __worker(self):
-
         # Thread initialization
         try:
             if self.initializer is not None:
@@ -701,16 +692,26 @@ class ThreadPoolExecutor(object):
         except BaseException as e:
             smash(self.output_queue, e)
 
-    def __imap(self, iterable, func, *, ordered=False, key=None, parallelism=1,
-               buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
-
+    def __imap(
+        self,
+        iterable,
+        func,
+        *,
+        ordered=False,
+        key=None,
+        parallelism=1,
+        buffer_size=DEFAULT_BUFFER_SIZE,
+        throttle=0
+    ):
         # Cannot run in multiple threads
         if self.imap_lock.locked():
-            raise RuntimeError('cannot run multiple executor methods concurrently from different threads')
+            raise RuntimeError(
+                "cannot run multiple executor methods concurrently from different threads"
+            )
 
         # Cannot run if already closed
         if self.closed:
-            raise RuntimeError('cannot use thread pool after teardown')
+            raise RuntimeError("cannot use thread pool after teardown")
 
         assert not self.boot_barrier.broken
 
@@ -728,21 +729,17 @@ class ThreadPoolExecutor(object):
         end_event = Event()
         state = IterationState()
         buffer = Buffer(
-            self.throttled_groups,
-            maxsize=buffer_size,
-            parallelism=parallelism
+            self.throttled_groups, maxsize=buffer_size, parallelism=parallelism
         )
         ordered_output_buffer = OrderedOutputBuffer()
 
         def enqueue():
             try:
                 while not end_event.is_set():
-
                     # First we check to see if there is a suitable buffered job
                     job = buffer.get()
 
                     if job is None:
-
                         # Else we consume the iterator to find one
                         try:
                             if not iterable_is_queue:
@@ -774,12 +771,7 @@ class ThreadPoolExecutor(object):
                         if key is not None:
                             group = key(item)
 
-                        job = Job(
-                            func,
-                            item=item,
-                            index=next(job_counter),
-                            group=group
-                        )
+                        job = Job(func, item=item, index=next(job_counter), group=group)
 
                         buffer.put(job)
                         continue
@@ -864,17 +856,24 @@ class ThreadPoolExecutor(object):
                 cleanup(not raised)
 
         dispatcher = Thread(
-            name='Thread-quenouille-%i-dispatcher' % id(self),
+            name="Thread-quenouille-%i-dispatcher" % id(self),
             target=enqueue,
-            daemon=self.daemonic
+            daemon=self.daemonic,
         )
         dispatcher.start()
 
         return output()
 
-    def imap_unordered(self, iterable, func, *, key=None, parallelism=1,
-                       buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
-
+    def imap_unordered(
+        self,
+        iterable,
+        func,
+        *,
+        key=None,
+        parallelism=1,
+        buffer_size=DEFAULT_BUFFER_SIZE,
+        throttle=0
+    ):
         validate_imap_kwargs(
             iterable=iterable,
             func=func,
@@ -882,7 +881,7 @@ class ThreadPoolExecutor(object):
             key=key,
             parallelism=parallelism,
             buffer_size=buffer_size,
-            throttle=throttle
+            throttle=throttle,
         )
 
         return self.__imap(
@@ -892,12 +891,19 @@ class ThreadPoolExecutor(object):
             key=key,
             parallelism=parallelism,
             buffer_size=buffer_size,
-            throttle=throttle
+            throttle=throttle,
         )
 
-    def imap(self, iterable, func, *, key=None, parallelism=1,
-             buffer_size=DEFAULT_BUFFER_SIZE, throttle=0):
-
+    def imap(
+        self,
+        iterable,
+        func,
+        *,
+        key=None,
+        parallelism=1,
+        buffer_size=DEFAULT_BUFFER_SIZE,
+        throttle=0
+    ):
         validate_imap_kwargs(
             iterable=iterable,
             func=func,
@@ -905,7 +911,7 @@ class ThreadPoolExecutor(object):
             key=key,
             parallelism=parallelism,
             buffer_size=buffer_size,
-            throttle=throttle
+            throttle=throttle,
         )
 
         return self.__imap(
@@ -915,21 +921,31 @@ class ThreadPoolExecutor(object):
             key=key,
             parallelism=parallelism,
             buffer_size=buffer_size,
-            throttle=throttle
+            throttle=throttle,
         )
 
 
-def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
-                   buffer_size=DEFAULT_BUFFER_SIZE, throttle=0,
-                   initializer=None, initargs=tuple(), wait=True, daemonic=False):
-
+def imap_unordered(
+    iterable,
+    func,
+    threads=None,
+    *,
+    key=None,
+    parallelism=1,
+    buffer_size=DEFAULT_BUFFER_SIZE,
+    throttle=0,
+    initializer=None,
+    initargs=tuple(),
+    wait=True,
+    daemonic=False
+):
     validate_threadpool_kwargs(
-        'threads',
+        "threads",
         threads,
         initializer=initializer,
         initargs=initargs,
         wait=wait,
-        daemonic=daemonic
+        daemonic=daemonic,
     )
     validate_imap_kwargs(
         iterable=iterable,
@@ -938,16 +954,13 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
         key=key,
         parallelism=parallelism,
         buffer_size=buffer_size,
-        throttle=throttle
+        throttle=throttle,
     )
 
     # If we know the size of the iterable, and this size is less than the
     # number of desired threads, we adjust the number of threads accordingly
     if threads is not None and isinstance(iterable, Sized):
-        threads = min(
-            len(iterable),
-            threads
-        )
+        threads = min(len(iterable), threads)
 
     def generator():
         with ThreadPoolExecutor(
@@ -955,7 +968,7 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
             initializer=initializer,
             initargs=initargs,
             wait=wait,
-            daemonic=daemonic
+            daemonic=daemonic,
         ) as executor:
             yield from executor.imap_unordered(
                 iterable,
@@ -963,23 +976,33 @@ def imap_unordered(iterable, func, threads=None, *, key=None, parallelism=1,
                 key=key,
                 parallelism=parallelism,
                 buffer_size=buffer_size,
-                throttle=throttle
+                throttle=throttle,
             )
 
     return generator()
 
 
-def imap(iterable, func, threads=None, *, key=None, parallelism=1,
-         buffer_size=DEFAULT_BUFFER_SIZE, throttle=0,
-         initializer=None, initargs=tuple(), wait=True, daemonic=False):
-
+def imap(
+    iterable,
+    func,
+    threads=None,
+    *,
+    key=None,
+    parallelism=1,
+    buffer_size=DEFAULT_BUFFER_SIZE,
+    throttle=0,
+    initializer=None,
+    initargs=tuple(),
+    wait=True,
+    daemonic=False
+):
     validate_threadpool_kwargs(
-        'threads',
+        "threads",
         threads,
         initializer=initializer,
         initargs=initargs,
         wait=wait,
-        daemonic=daemonic
+        daemonic=daemonic,
     )
     validate_imap_kwargs(
         iterable=iterable,
@@ -988,14 +1011,11 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
         key=key,
         parallelism=parallelism,
         buffer_size=buffer_size,
-        throttle=throttle
+        throttle=throttle,
     )
 
     if isinstance(iterable, Sized):
-        threads = min(
-            len(iterable),
-            threads or float('inf')
-        )
+        threads = min(len(iterable), threads or float("inf"))
 
     def generator():
         with ThreadPoolExecutor(
@@ -1003,7 +1023,7 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
             initializer=initializer,
             initargs=initargs,
             wait=wait,
-            daemonic=daemonic
+            daemonic=daemonic,
         ) as executor:
             yield from executor.imap(
                 iterable,
@@ -1011,17 +1031,17 @@ def imap(iterable, func, threads=None, *, key=None, parallelism=1,
                 key=key,
                 parallelism=parallelism,
                 buffer_size=buffer_size,
-                throttle=throttle
+                throttle=throttle,
             )
 
     return generator()
 
 
 def generate_function_doc(ordered=False):
-    disclaimer = 'Note that results will be yielded in an arbitrary order.'
+    disclaimer = "Note that results will be yielded in an arbitrary order."
 
     if ordered:
-        disclaimer = 'Note that results will be yielded in same order as the input.'
+        disclaimer = "Note that results will be yielded in same order as the input."
 
     return (
         """

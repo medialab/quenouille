@@ -16,10 +16,16 @@ endef
 clean:
 	$(call clean)
 
-lint:
-	@echo Linting source code using pep8...
-	pycodestyle --ignore E501,E722,E731,W504 $(SOURCE) test
+deps:
+	pip3 install -U pip
+	pip3 install -r requirements.txt
+
+format:
+	@echo Formatting source code using black
+	black $(SOURCE) ftest test setup.py
 	@echo
+
+lint:
 	@echo Searching for unused imports...
 	importchecker $(SOURCE) | grep -v __init__ || true
 	importchecker test | grep -v __init__ || true

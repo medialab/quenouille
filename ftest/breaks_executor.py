@@ -2,11 +2,14 @@ import threading
 import time
 from quenouille import ThreadPoolExecutor
 
+
 def print_active_threads(i=-1):
-    print('Pass %s - (%i active threads)' % (i + 1, threading.active_count()))
+    print("Pass %s - (%i active threads)" % (i + 1, threading.active_count()))
+
 
 def worker(item):
     return item
+
 
 with ThreadPoolExecutor(max_workers=100) as executor:
     for i in range(1_000):

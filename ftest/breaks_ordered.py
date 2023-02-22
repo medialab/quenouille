@@ -2,12 +2,15 @@ import threading
 import time
 from quenouille import imap
 
+
 def print_active_threads(i=-1):
-    print('Pass %s - (%i active threads)' % (i + 1, threading.active_count()))
+    print("Pass %s - (%i active threads)" % (i + 1, threading.active_count()))
+
 
 def worker(item):
     time.sleep(0.01)
     return item
+
 
 for i in range(10):
     print_active_threads(i)

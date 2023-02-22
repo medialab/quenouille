@@ -2,14 +2,18 @@ import time
 from quenouille import imap_unordered
 from random import random
 
+
 def work(i):
     time.sleep(0.1)
     return i
 
+
 DATA = range(100_000)
 
+
 def group(_):
-    return 'A' if random() < 0.5 else 'B'
+    return "A" if random() < 0.5 else "B"
+
 
 # TODO: problems to solve:
 # 1. keyboard interrupt should work with group and throttling even with wait and not daemonic

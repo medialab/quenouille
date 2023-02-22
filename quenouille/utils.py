@@ -34,12 +34,12 @@ def smash(q, v):
 
 def is_queue(v):
     return (
-        hasattr(v, 'get') and
-        callable(v.get) and
-        hasattr(v, 'put') and
-        callable(v.put) and
-        hasattr(v, 'task_done') and
-        callable(v.task_done)
+        hasattr(v, "get")
+        and callable(v.get)
+        and hasattr(v, "put")
+        and callable(v.put)
+        and hasattr(v, "task_done")
+        and callable(v.task_done)
     )
 
 
@@ -52,6 +52,7 @@ class SmartTimer(Timer):
     """
     A Timer subclass able to return information about its execution time.
     """
+
     def __init__(self, *args, **kwargs):
         self.started_time = time.time()
         super().__init__(*args, **kwargs)
@@ -70,9 +71,8 @@ class NamedLocks(object):
 
     def __repr__(self):
         with self.own_lock:
-            return '<{name} acquired={acquired!r}>'.format(
-                name=self.__class__.__name__,
-                acquired=list(self.locks)
+            return "<{name} acquired={acquired!r}>".format(
+                name=self.__class__.__name__, acquired=list(self.locks)
             )
 
     def __len__(self):
