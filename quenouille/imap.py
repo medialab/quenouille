@@ -4,14 +4,26 @@
 #
 # Python implementation of a complex, lazy multithreaded iterable consumer.
 #
-from typing import Generic, TypeVar, Optional, Hashable, Callable, Dict
+from typing import (
+    cast,
+    Generic,
+    TypeVar,
+    Optional,
+    Hashable,
+    Callable,
+    Dict,
+    List,
+    Iterator,
+    Iterable,
+    Union,
+)
 
 import sys
 import time
 from queue import Queue, Empty
 from threading import Thread, Event, Lock, Condition, Barrier, BrokenBarrierError
 from collections import OrderedDict
-from collections.abc import Iterable, Sized
+from collections.abc import Sized
 from itertools import count
 
 from quenouille.exceptions import BrokenThreadPool
@@ -26,7 +38,7 @@ from quenouille.utils import (
 from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPSILON
 
 ItemType = TypeVar("ItemType")
-GroupType = TypeVar("GroupType", bound=Optional[Hashable])
+GroupType = TypeVar("GroupType", bound=Hashable)
 ResultType = TypeVar("ResultType")
 
 
@@ -42,12 +54,12 @@ class Job(Generic[ItemType, GroupType, ResultType]):
         func: Callable[[ItemType], ResultType],
         item: ItemType,
         index: int,
-        group: GroupType = None,
+        group: Optional[GroupType] = None,
     ):
         self.func = func  # type: Callable[[ItemType], ResultType]
         self.item = item  # type: ItemType
         self.index = index  # type: int
-        self.group = group  # type: GroupType
+        self.group = group  # type: Optional[GroupType]
         self.result = None  # type: Optional[ResultType]
         self.exc_info = None
 
@@ -189,9 +201,10 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
                 raise TypeError('callable "throttle" must return numbers >= 0')
 
         if throttle_time != 0:
-            assert job.group not in self
+            group = cast(GroupType, job.group)
+            assert group not in self
 
-            self.groups[job.group] = time.time() + throttle_time
+            self.groups[group] = time.time() + throttle_time
             self.__spawn_timer(throttle_time)
 
     def __cancel_timer(self) -> None:
@@ -273,7 +286,7 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
         del self.groups
 
 
-class Buffer(object):
+class Buffer(Generic[ItemType, GroupType, ResultType]):
     """
     Class tasked with an executor imap buffer where jobs are enqueued when
     read from the iterated stream.
@@ -287,34 +300,43 @@ class Buffer(object):
     into an incoherent state.
     """
 
-    def __init__(self, throttled_groups, maxsize=1, parallelism=1):
+    def __init__(
+        self,
+        throttled_groups: ThrottledGroups[ItemType, GroupType, ResultType],
+        maxsize: int = 1,
+        parallelism: int = 1,
+    ):
         # Properties
-        self.throttled_groups = throttled_groups
-        self.maxsize = maxsize
-        self.parallelism = parallelism
+        self.throttled_groups = throttled_groups  # type: ThrottledGroups
+        self.maxsize = maxsize  # type: int
+        self.parallelism = parallelism  # type: int
 
         assert isinstance(self.parallelism, int) or callable(self.parallelism)
 
-        def throttle_callback(n):
+        def throttle_callback(n: int):
             with self.condition:
                 self.condition.notify(n)
 
         self.throttled_groups.callback(throttle_callback)
 
         # Threading
-        self.condition = Condition()
-        self.lock = Lock()
-        self.teardown_event = Event()
+        self.condition = Condition()  # type: Condition
+        self.lock = Lock()  # type: Lock
+        self.teardown_event = Event()  # type: Event
 
         # Containers
-        self.items = OrderedDict()
-        self.worked_groups = {}  # NOTE: not using a Counter here to avoid magic
+        self.items = (
+            OrderedDict()
+        )  # type: OrderedDict[int, Job[ItemType, GroupType, ResultType]]
 
-    def __len__(self):
+        # NOTE: not using a Counter here to avoid magic
+        self.worked_groups = {}  # type: Dict[GroupType, int]
+
+    def __len__(self) -> int:
         with self.lock:
             return len(self.items)
 
-    def teardown(self):
+    def teardown(self) -> None:
         self.teardown_event.set()
 
         with self.condition:
@@ -323,7 +345,7 @@ class Buffer(object):
         del self.items
         del self.worked_groups
 
-    def is_clean(self):
+    def is_clean(self) -> bool:
         """
         This function is only used after an imap is over to ensure no
         dangling resources could be found.
@@ -331,25 +353,25 @@ class Buffer(object):
         with self.lock:
             return len(self.items) == 0 and len(self.worked_groups) == 0
 
-    def __full(self):
+    def __full(self) -> bool:
         count = len(self.items)
         assert count <= self.maxsize
         return count == self.maxsize
 
-    def full(self):
+    def full(self) -> bool:
         with self.lock:
             return self.__full()
 
-    def __empty(self):
+    def __empty(self) -> bool:
         count = len(self.items)
         assert count <= self.maxsize
         return count == 0
 
-    def empty(self):
+    def empty(self) -> bool:
         with self.lock:
             return self.__empty()
 
-    def __can_work(self, job):
+    def __can_work(self, job: Job[ItemType, GroupType, ResultType]) -> bool:
         # None group is the default and can always be processed without constraints
         if job.group is None:
             return True
@@ -373,20 +395,20 @@ class Buffer(object):
 
         return count < parallelism
 
-    def __find_suitable_job(self):
+    def __find_suitable_job(self) -> Optional[Job[ItemType, GroupType, ResultType]]:
         for job in self.items.values():
             if self.__can_work(job):
                 return job
 
         return None
 
-    def put(self, job: Job):
+    def put(self, job: Job[ItemType, GroupType, ResultType]) -> None:
         with self.lock:
             assert not self.__full()
 
             self.items[id(job)] = job
 
-    def get(self):
+    def get(self) -> Optional[Job[ItemType, GroupType, ResultType]]:
         while not self.teardown_event.is_set():
             self.lock.acquire()
 
@@ -413,7 +435,7 @@ class Buffer(object):
             self.lock.release()
             return None
 
-    def register_job(self, job: Job):
+    def register_job(self, job: Job[ItemType, GroupType, ResultType]) -> None:
         with self.lock:
             group = job.group
 
@@ -426,7 +448,7 @@ class Buffer(object):
             else:
                 self.worked_groups[group] += 1
 
-    def unregister_job(self, job: Job):
+    def unregister_job(self, job: Job[ItemType, GroupType, ResultType]) -> None:
         with self.lock:
             group = job.group
 
@@ -447,7 +469,7 @@ class Buffer(object):
             self.condition.notify()
 
 
-class OrderedOutputBuffer(object):
+class OrderedOutputBuffer(Generic[ItemType, GroupType, ResultType]):
     """
     Class in charge of yielding values in the same order as they were extracted
     from the iterated stream.
@@ -457,22 +479,24 @@ class OrderedOutputBuffer(object):
     """
 
     def __init__(self):
-        self.last_index = 0
-        self.items = {}
+        self.last_index = 0  # type: int
+        self.items = {}  # type: Dict[int, Job[ItemType, GroupType, ResultType]]
 
-    def is_clean(self):
+    def is_clean(self) -> bool:
         """
         This function is only used after an imap is over to ensure no
         dangling resource could be found.
         """
         return len(self.items) == 0
 
-    def flush(self):
+    def flush(self) -> Iterator[Optional[ResultType]]:
         while self.last_index in self.items:
             yield self.items.pop(self.last_index).result
             self.last_index += 1
 
-    def output(self, job):
+    def output(
+        self, job: Job[ItemType, GroupType, ResultType]
+    ) -> Iterator[Optional[ResultType]]:
         if job.index == self.last_index:
             self.last_index += 1
             yield job.result
@@ -483,7 +507,7 @@ class OrderedOutputBuffer(object):
 
 def validate_threadpool_kwargs(
     name, max_workers=None, initializer=None, initargs=None, wait=None, daemonic=None
-):
+) -> None:
     if max_workers is None:
         return
 
@@ -505,7 +529,7 @@ def validate_threadpool_kwargs(
 
 def validate_imap_kwargs(
     iterable, func, *, max_workers, key, parallelism, buffer_size, throttle
-):
+) -> None:
     if not isinstance(iterable, Iterable) and not is_queue(iterable):
         raise TypeError("target is not iterable nor a queue")
 
@@ -534,7 +558,7 @@ def validate_imap_kwargs(
         raise TypeError('"throttle" cannot be negative')
 
 
-class ThreadPoolExecutor(object):
+class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
     """
     Quenouille custom ThreadPoolExecutor able to lazily pull items to process
     from iterated streams, all while bounding used memory and respecting
@@ -556,11 +580,11 @@ class ThreadPoolExecutor(object):
 
     def __init__(
         self,
-        max_workers=None,
+        max_workers: Optional[int] = None,
         initializer=None,
         initargs=tuple(),
-        wait=True,
-        daemonic=False,
+        wait: bool = True,
+        daemonic: bool = False,
     ):
         # Validation and defaults
         validate_threadpool_kwargs(
@@ -576,28 +600,32 @@ class ThreadPoolExecutor(object):
             max_workers = get_default_maxworkers()
 
         # Properties
-        self.max_workers = max_workers
-        self.wait = wait
-        self.daemonic = daemonic
+        self.max_workers = max_workers  # type: int
+        self.wait = wait  # type: bool
+        self.daemonic = daemonic  # type: bool
 
         # Init
         self.initializer = initializer
         self.initargs = list(initargs)
 
         # Queues
-        self.job_queue = Queue(maxsize=max_workers)
-        self.output_queue = Queue()
+        self.job_queue = Queue(
+            maxsize=max_workers
+        )  # type: Queue[Union[Job[ItemType, GroupType, ResultType], object]]
+        self.output_queue = Queue()  # Queue[Job[ItemType, GroupType, ResultType]]
 
         # Threading
-        self.throttled_groups = ThrottledGroups(self.output_queue)
-        self.teardown_event = Event()
-        self.teardown_lock = Lock()
-        self.broken_lock = Lock()
-        self.imap_lock = Lock()
-        self.boot_barrier = Barrier(max_workers + 1)
+        self.throttled_groups = ThrottledGroups(
+            self.output_queue
+        )  # ThrottledGroups[ItemType, GroupType, ResultType]
+        self.teardown_event = Event()  # type: Event
+        self.teardown_lock = Lock()  # type: Lock
+        self.broken_lock = Lock()  # type: Lock
+        self.imap_lock = Lock()  # type Lock
+        self.boot_barrier = Barrier(max_workers + 1)  # type: Barrier
 
         # State
-        self.closed = False
+        self.closed = False  # type: bool
 
         # Thread pool
         self.threads = [
@@ -607,7 +635,7 @@ class ThreadPoolExecutor(object):
                 daemon=self.daemonic,
             )
             for n in range(max_workers)
-        ]
+        ]  # type: List[Thread]
 
         # Actual initialization
         try:
@@ -630,10 +658,10 @@ class ThreadPoolExecutor(object):
 
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args) -> Optional[bool]:
         self.shutdown(wait=self.wait)
 
-    def shutdown(self, wait=True):
+    def shutdown(self, wait=True) -> None:
         if self.closed:
             return
 
@@ -657,19 +685,19 @@ class ThreadPoolExecutor(object):
 
             self.closed = True
 
-    def __clear_output_queue(self):
+    def __clear_output_queue(self) -> None:
         clear(self.output_queue)
 
-    def __cancel_all_jobs(self):
+    def __cancel_all_jobs(self) -> None:
         clear(self.job_queue)
 
-    def __kill_workers(self):
+    def __kill_workers(self) -> None:
         self.__cancel_all_jobs()
 
         n = sum(1 if t.is_alive() else 0 for t in self.threads)
         flush(self.job_queue, n, THE_END_IS_NIGH)
 
-    def __worker(self):
+    def __worker(self) -> None:
         # Thread initialization
         try:
             if self.initializer is not None:
@@ -692,6 +720,8 @@ class ThreadPoolExecutor(object):
                     if job is THE_END_IS_NIGH:
                         break
 
+                    job = cast(Job[ItemType, GroupType, ResultType], job)
+
                     # Actually performing the given task
                     job()
 
@@ -706,15 +736,16 @@ class ThreadPoolExecutor(object):
 
     def __imap(
         self,
-        iterable,
-        func,
+        iterable: Iterable[ItemType],
+        func: Callable[[ItemType], ResultType],
         *,
-        ordered=False,
-        key=None,
-        parallelism=1,
-        buffer_size=DEFAULT_BUFFER_SIZE,
-        throttle=0
+        ordered: bool = False,
+        key: Optional[Callable[[ItemType], GroupType]] = None,
+        parallelism: int = 1,
+        buffer_size: int = DEFAULT_BUFFER_SIZE,
+        throttle: float = 0
     ):
+
         # Cannot run in multiple threads
         if self.imap_lock.locked():
             raise RuntimeError(
@@ -755,10 +786,10 @@ class ThreadPoolExecutor(object):
                         # Else we consume the iterator to find one
                         try:
                             if not iterable_is_queue:
-                                item = next(iterator)
+                                item = next(cast(Iterator[ItemType], iterator))
                             else:
                                 try:
-                                    item = iterable.get(block=False)
+                                    item = cast(Queue, iterable).get(block=False)
                                 except Empty:
                                     if state.has_running_tasks():
                                         state.wait_for_any_task_to_finish()

@@ -22,7 +22,7 @@ deps:
 
 format:
 	@echo Formatting source code using black
-	black $(SOURCE) ftest test setup.py
+	black $(SOURCE) ftest test setup.py -t py35
 	@echo
 
 lint:
