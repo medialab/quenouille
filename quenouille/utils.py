@@ -4,14 +4,18 @@
 #
 # Miscellaneous utility functions.
 #
+from typing import TypeVar, Generic
+
 import os
 import time
 from threading import Lock, Timer
 from weakref import WeakValueDictionary
-from queue import Empty, Full
+from queue import Empty, Full, Queue
+
+ItemType = TypeVar("ItemType")
 
 
-def clear(q):
+def clear(q: Queue) -> None:
     while True:
         try:
             q.get_nowait()
@@ -19,7 +23,7 @@ def clear(q):
             break
 
 
-def flush(q, n, msg):
+def flush(q: "Queue[ItemType]", n: int, msg: ItemType) -> None:
     for _ in range(n):
         try:
             q.put_nowait(msg)
@@ -27,12 +31,12 @@ def flush(q, n, msg):
             break
 
 
-def smash(q, v):
+def smash(q: "Queue[ItemType]", v: ItemType) -> None:
     clear(q)
     q.put_nowait(v)
 
 
-def is_queue(v):
+def is_queue(v) -> bool:
     return (
         hasattr(v, "get")
         and callable(v.get)
@@ -44,7 +48,7 @@ def is_queue(v):
 
 
 # As per: https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor
-def get_default_maxworkers():
+def get_default_maxworkers() -> int:
     return min(32, (os.cpu_count() or 1) + 4)
 
 
@@ -54,20 +58,25 @@ class SmartTimer(Timer):
     """
 
     def __init__(self, *args, **kwargs):
-        self.started_time = time.time()
+        self.started_time = time.time()  # type: float
         super().__init__(*args, **kwargs)
 
-    def elapsed(self):
+    def elapsed(self) -> float:
         return time.time() - self.started_time
 
-    def remaining(self):
+    def remaining(self) -> float:
         return self.interval - self.elapsed()
 
 
-class NamedLocks(object):
+LockedItemKey = TypeVar("LockedItemKey")
+
+
+class NamedLocks(Generic[LockedItemKey]):
     def __init__(self):
-        self.own_lock = Lock()
-        self.locks = WeakValueDictionary()
+        self.own_lock = Lock()  # type: Lock
+        self.locks = (
+            WeakValueDictionary()
+        )  # type: WeakValueDictionary[LockedItemKey, Lock]
 
     def __repr__(self):
         with self.own_lock:
@@ -75,15 +84,15 @@ class NamedLocks(object):
                 name=self.__class__.__name__, acquired=list(self.locks)
             )
 
-    def __len__(self):
+    def __len__(self) -> int:
         with self.own_lock:
             return len(self.locks)
 
-    def __contains__(self, key):
+    def __contains__(self, key: LockedItemKey) -> bool:
         with self.own_lock:
             return key in self.locks
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: LockedItemKey) -> Lock:
         with self.own_lock:
             if key not in self.locks:
                 lock = Lock()
@@ -92,5 +101,5 @@ class NamedLocks(object):
 
             return self.locks[key]
 
-    def __call__(self, key):
+    def __call__(self, key: LockedItemKey) -> Lock:
         return self[key]
