@@ -4,18 +4,21 @@
 #
 # Miscellaneous utility functions.
 #
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, List, Set, Tuple, Hashable
 
 import os
 import time
+import heapq
 from threading import Lock, Timer
 from weakref import WeakValueDictionary
 from queue import Empty, Full, Queue
 
+from quenouille.constants import TIMER_EPSILON
+
 ItemType = TypeVar("ItemType")
 
 
-def clear(q: Queue) -> None:
+def clear(q: 'Queue') -> None:
     while True:
         try:
             q.get_nowait()
@@ -103,3 +106,31 @@ class NamedLocks(Generic[LockedItemKey]):
 
     def __call__(self, key: LockedItemKey) -> Lock:
         return self[key]
+
+HeapSetItemType = TypeVar('HeapSetItemType', bound=Hashable)
+
+
+class TimedHeapSet(Generic[HeapSetItemType]):
+    def __init__(self):
+        self.clear()
+
+    def clear(self) -> None:
+        self.heap = [] # type: List[Tuple[float, HeapSetItemType]]
+        self.set = set() # type: Set[HeapSetItemType]
+
+    def __len__(self) -> int:
+        return len(self.heap)
+
+    def __contains__(self, item: HeapSetItemType) -> bool:
+        return item in self.set
+
+    def add(self, item: HeapSetItemType, duration: float) -> None:
+        self.set.add(item)
+        heapq.heappush(self.heap, (time.time() + duration, item))
+
+    def cleanup(self) -> None:
+        current_time = time.time()
+
+        while self.heap and current_time >= self.heap[0][0] - TIMER_EPSILON:
+            self.set.remove(self.heap[0][1])
+            heapq.heappop(self.heap)
