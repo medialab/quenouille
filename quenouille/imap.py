@@ -43,6 +43,10 @@ ItemType = TypeVar("ItemType")
 GroupType = TypeVar("GroupType", bound=Hashable)
 ResultType = TypeVar("ResultType")
 ImapTarget = Union["Queue[ItemType]", Iterable[ItemType]]
+ParallelismType = Union[Callable[[GroupType], int], int]
+ThrottleType = Union[
+    Callable[[Optional[GroupType], ItemType, Optional[ResultType]], float], float
+]
 
 
 class Job(Generic[ItemType, GroupType, ResultType]):
@@ -151,10 +155,14 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
     already perform the necessary actions using a lock.
     """
 
-    def __init__(self, output_queue: Queue, throttle: float = 0):
+    def __init__(
+        self,
+        output_queue: Queue,
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
+    ):
         # Properties
         self.output_queue = output_queue  # type: Queue
-        self.throttle = throttle  # type: float
+        self.throttle = throttle  # type: ThrottleType[GroupType, ItemType, ResultType]
         self.identity = None  # type: Optional[int]
 
         # Containers
@@ -178,7 +186,9 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
         self.__reset()
         self.__registered_calback = None
 
-    def update(self, key, throttle: float) -> None:
+    def update(
+        self, key, throttle: ThrottleType[GroupType, ItemType, ResultType]
+    ) -> None:
         assert key is None or callable(key)
 
         new_identity = id(key)
@@ -207,8 +217,8 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
             group = cast(GroupType, job.group)
             assert group not in self
 
-            self.groups[group] = time.time() + throttle_time
-            self.__spawn_timer(throttle_time)
+            self.groups[group] = time.time() + throttle_time  # type: ignore
+            self.__spawn_timer(throttle_time)  # type: ignore
 
     def __cancel_timer(self) -> None:
         if self.timer is None:
@@ -307,12 +317,12 @@ class Buffer(Generic[ItemType, GroupType, ResultType]):
         self,
         throttled_groups: ThrottledGroups[ItemType, GroupType, ResultType],
         maxsize: int = 1,
-        parallelism: int = 1,
+        parallelism: ParallelismType[GroupType] = 1,
     ):
         # Properties
         self.throttled_groups = throttled_groups  # type: ThrottledGroups
         self.maxsize = maxsize  # type: int
-        self.parallelism = parallelism  # type: int
+        self.parallelism = parallelism  # type: ParallelismType[GroupType]
 
         assert isinstance(self.parallelism, int) or callable(self.parallelism)
 
@@ -396,7 +406,7 @@ class Buffer(Generic[ItemType, GroupType, ResultType]):
             if not isinstance(parallelism, int) or parallelism < 1:
                 raise TypeError('callable "parallelism" must return positive integers')
 
-        return count < parallelism
+        return count < parallelism  # type: ignore
 
     def __find_suitable_job(self) -> Optional[Job[ItemType, GroupType, ResultType]]:
         for job in self.items.values():
@@ -742,9 +752,9 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         *,
         ordered: bool = False,
         key: Optional[Callable[[ItemType], GroupType]] = None,
-        parallelism: int = 1,
+        parallelism: ParallelismType[GroupType] = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
-        throttle: float = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
     ) -> Iterator[ResultType]:
         # Cannot run in multiple threads
         if self.imap_lock.locked():
@@ -917,9 +927,9 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         func: Callable[[ItemType], ResultType],
         *,
         key: Optional[Callable[[ItemType], GroupType]] = None,
-        parallelism: int = 1,
+        parallelism: ParallelismType[GroupType] = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
-        throttle: float = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
     ) -> Iterator[ResultType]:
         validate_imap_kwargs(
             iterable=iterable,
@@ -947,9 +957,9 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         func: Callable[[ItemType], ResultType],
         *,
         key: Optional[Callable[[ItemType], GroupType]] = None,
-        parallelism: int = 1,
+        parallelism: ParallelismType[GroupType] = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
-        throttle: float = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
     ) -> Iterator[ResultType]:
         validate_imap_kwargs(
             iterable=iterable,
@@ -978,9 +988,9 @@ def imap_unordered(
     threads: Optional[int] = None,
     *,
     key: Optional[Callable[[ItemType], GroupType]] = None,
-    parallelism: int = 1,
+    parallelism: ParallelismType[GroupType] = 1,
     buffer_size: int = DEFAULT_BUFFER_SIZE,
-    throttle: float = 0,
+    throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
     initializer: Optional[Callable[..., None]] = None,
     initargs: Tuple[Any, ...] = tuple(),
     wait: bool = True,
@@ -1035,9 +1045,9 @@ def imap(
     threads: Optional[int] = None,
     *,
     key: Optional[Callable[[ItemType], GroupType]] = None,
-    parallelism: int = 1,
+    parallelism: ParallelismType[GroupType] = 1,
     buffer_size: int = DEFAULT_BUFFER_SIZE,
-    throttle: float = 0,
+    throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
     initializer: Optional[Callable[..., None]] = None,
     initargs: Tuple[Any, ...] = tuple(),
     wait: bool = True,

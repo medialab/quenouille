@@ -18,7 +18,7 @@ from quenouille.constants import TIMER_EPSILON
 ItemType = TypeVar("ItemType")
 
 
-def clear(q: 'Queue') -> None:
+def clear(q: "Queue") -> None:
     while True:
         try:
             q.get_nowait()
@@ -107,7 +107,8 @@ class NamedLocks(Generic[LockedItemKey]):
     def __call__(self, key: LockedItemKey) -> Lock:
         return self[key]
 
-HeapSetItemType = TypeVar('HeapSetItemType', bound=Hashable)
+
+HeapSetItemType = TypeVar("HeapSetItemType", bound=Hashable)
 
 
 class TimedHeapSet(Generic[HeapSetItemType]):
@@ -115,8 +116,8 @@ class TimedHeapSet(Generic[HeapSetItemType]):
         self.clear()
 
     def clear(self) -> None:
-        self.heap = [] # type: List[Tuple[float, HeapSetItemType]]
-        self.set = set() # type: Set[HeapSetItemType]
+        self.heap = []  # type: List[Tuple[float, HeapSetItemType]]
+        self.set = set()  # type: Set[HeapSetItemType]
 
     def __len__(self) -> int:
         return len(self.heap)
