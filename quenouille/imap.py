@@ -489,17 +489,15 @@ class OrderedOutputBuffer(Generic[ItemType, GroupType, ResultType]):
         """
         return len(self.items) == 0
 
-    def flush(self) -> Iterator[Optional[ResultType]]:
+    def flush(self) -> Iterator[ResultType]:
         while self.last_index in self.items:
-            yield self.items.pop(self.last_index).result
+            yield self.items.pop(self.last_index).result  # type: ignore
             self.last_index += 1
 
-    def output(
-        self, job: Job[ItemType, GroupType, ResultType]
-    ) -> Iterator[Optional[ResultType]]:
+    def output(self, job: Job[ItemType, GroupType, ResultType]) -> Iterator[ResultType]:
         if job.index == self.last_index:
             self.last_index += 1
-            yield job.result
+            yield job.result  # type: ignore
             yield from self.flush()
         else:
             self.items[job.index] = job
@@ -612,7 +610,9 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         self.job_queue = Queue(
             maxsize=max_workers
         )  # type: Queue[Union[Job[ItemType, GroupType, ResultType], object]]
-        self.output_queue = Queue()  # Queue[Job[ItemType, GroupType, ResultType]]
+        self.output_queue = (
+            Queue()
+        )  # type: Queue[Union[BaseException, Job[ItemType, GroupType, ResultType], object]]
 
         # Threading
         self.throttled_groups = ThrottledGroups(
@@ -744,8 +744,7 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         parallelism: int = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
         throttle: float = 0
-    ):
-
+    ) -> Iterator[ResultType]:
         # Cannot run in multiple threads
         if self.imap_lock.locked():
             raise RuntimeError(
@@ -773,8 +772,10 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         state = IterationState()
         buffer = Buffer(
             self.throttled_groups, maxsize=buffer_size, parallelism=parallelism
-        )
-        ordered_output_buffer = OrderedOutputBuffer()
+        )  # type: Buffer[ItemType, GroupType, ResultType]
+        ordered_output_buffer = (
+            OrderedOutputBuffer()
+        )  # type: OrderedOutputBuffer[ItemType, GroupType, ResultType]
 
         def enqueue():
             try:
@@ -827,7 +828,7 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
             except BaseException as e:
                 smash(self.output_queue, e)
 
-        def cleanup(normal_exit=True):
+        def cleanup(normal_exit: bool = True) -> None:
             end_event.set()
 
             # Clearing the job queue to cancel next jobs
@@ -853,7 +854,7 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
 
             self.imap_lock.release()
 
-        def output():
+        def output() -> Iterator[ResultType]:
             raised = False
 
             try:
@@ -867,19 +868,21 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
                     if isinstance(job, BaseException):
                         raise job
 
+                    job = cast(Job[ItemType, GroupType, ResultType], job)
+
                     # Unregistering job in buffer to let other threads continue working
                     buffer.unregister_job(job)
 
                     # Raising an error that occurred within worker function
                     # NOTE: shenanigans with tracebacks don't seem to change anything
                     if job.exc_info is not None:
-                        raise job.exc_info[1].with_traceback(job.exc_info[2])
+                        raise job.exc_info[1].with_traceback(job.exc_info[2])  # type: ignore
 
                     # Actually yielding the value to main thread
                     if ordered:
                         yield from ordered_output_buffer.output(job)
                     else:
-                        yield job.result
+                        yield job.result  # type: ignore
 
                     # Acknowledging the job was finished
                     # NOTE: this was moved after yielding items so that the
@@ -909,14 +912,14 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
 
     def imap_unordered(
         self,
-        iterable,
-        func,
+        iterable: Iterable[ItemType],
+        func: Callable[[ItemType], ResultType],
         *,
-        key=None,
-        parallelism=1,
-        buffer_size=DEFAULT_BUFFER_SIZE,
-        throttle=0
-    ):
+        key: Optional[Callable[[ItemType], GroupType]] = None,
+        parallelism: int = 1,
+        buffer_size: int = DEFAULT_BUFFER_SIZE,
+        throttle: float = 0
+    ) -> Iterator[ResultType]:
         validate_imap_kwargs(
             iterable=iterable,
             func=func,
@@ -1080,7 +1083,7 @@ def imap(
     return generator()
 
 
-def generate_function_doc(ordered=False):
+def generate_function_doc(ordered: bool = False) -> str:
     disclaimer = "Note that results will be yielded in an arbitrary order."
 
     if ordered:
