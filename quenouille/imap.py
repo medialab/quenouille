@@ -13,6 +13,8 @@ from typing import (
     Callable,
     Dict,
     List,
+    Tuple,
+    Any,
     Iterator,
     Iterable,
     Union,
@@ -40,6 +42,7 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPS
 ItemType = TypeVar("ItemType")
 GroupType = TypeVar("GroupType", bound=Hashable)
 ResultType = TypeVar("ResultType")
+ImapTarget = Union["Queue[ItemType]", Iterable[ItemType]]
 
 
 class Job(Generic[ItemType, GroupType, ResultType]):
@@ -579,8 +582,8 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
     def __init__(
         self,
         max_workers: Optional[int] = None,
-        initializer=None,
-        initargs=tuple(),
+        initializer: Optional[Callable[..., None]] = None,
+        initargs: Tuple[Any, ...] = tuple(),
         wait: bool = True,
         daemonic: bool = False,
     ):
@@ -720,10 +723,8 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
                     if job is THE_END_IS_NIGH:
                         break
 
-                    job = cast(Job[ItemType, GroupType, ResultType], job)
-
                     # Actually performing the given task
-                    job()
+                    job()  # type: ignore
 
                 finally:
                     self.job_queue.task_done()
@@ -736,7 +737,7 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
 
     def __imap(
         self,
-        iterable: Iterable[ItemType],
+        iterable: ImapTarget[ItemType],
         func: Callable[[ItemType], ResultType],
         *,
         ordered: bool = False,
@@ -763,7 +764,7 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
         iterable_is_queue = is_queue(iterable)
 
         if not iterable_is_queue:
-            iterator = iter(iterable)
+            iterator = iter(iterable)  # type: ignore
 
         # State
         self.throttled_groups.update(key, throttle)
@@ -787,10 +788,10 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
                         # Else we consume the iterator to find one
                         try:
                             if not iterable_is_queue:
-                                item = next(cast(Iterator[ItemType], iterator))
+                                item = next(iterator)  # type: ignore
                             else:
                                 try:
-                                    item = cast(Queue, iterable).get(block=False)
+                                    item = iterable.get(block=False)  # type: ignore
                                 except Empty:
                                     if state.has_running_tasks():
                                         state.wait_for_any_task_to_finish()
@@ -912,7 +913,7 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
 
     def imap_unordered(
         self,
-        iterable: Iterable[ItemType],
+        iterable: ImapTarget[ItemType],
         func: Callable[[ItemType], ResultType],
         *,
         key: Optional[Callable[[ItemType], GroupType]] = None,
@@ -942,14 +943,14 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
 
     def imap(
         self,
-        iterable,
-        func,
+        iterable: ImapTarget[ItemType],
+        func: Callable[[ItemType], ResultType],
         *,
-        key=None,
-        parallelism=1,
-        buffer_size=DEFAULT_BUFFER_SIZE,
-        throttle=0
-    ):
+        key: Optional[Callable[[ItemType], GroupType]] = None,
+        parallelism: int = 1,
+        buffer_size: int = DEFAULT_BUFFER_SIZE,
+        throttle: float = 0
+    ) -> Iterator[ResultType]:
         validate_imap_kwargs(
             iterable=iterable,
             func=func,
@@ -972,19 +973,19 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
 
 
 def imap_unordered(
-    iterable,
-    func,
-    threads=None,
+    iterable: ImapTarget[ItemType],
+    func: Callable[[ItemType], ResultType],
+    threads: Optional[int] = None,
     *,
-    key=None,
-    parallelism=1,
-    buffer_size=DEFAULT_BUFFER_SIZE,
-    throttle=0,
-    initializer=None,
-    initargs=tuple(),
-    wait=True,
-    daemonic=False
-):
+    key: Optional[Callable[[ItemType], GroupType]] = None,
+    parallelism: int = 1,
+    buffer_size: int = DEFAULT_BUFFER_SIZE,
+    throttle: float = 0,
+    initializer: Optional[Callable[..., None]] = None,
+    initargs: Tuple[Any, ...] = tuple(),
+    wait: bool = True,
+    daemonic: bool = False
+) -> Iterator[ResultType]:
     validate_threadpool_kwargs(
         "threads",
         threads,
@@ -1029,19 +1030,19 @@ def imap_unordered(
 
 
 def imap(
-    iterable,
-    func,
-    threads=None,
+    iterable: ImapTarget[ItemType],
+    func: Callable[[ItemType], ResultType],
+    threads: Optional[int] = None,
     *,
-    key=None,
-    parallelism=1,
-    buffer_size=DEFAULT_BUFFER_SIZE,
-    throttle=0,
-    initializer=None,
-    initargs=tuple(),
-    wait=True,
-    daemonic=False
-):
+    key: Optional[Callable[[ItemType], GroupType]] = None,
+    parallelism: int = 1,
+    buffer_size: int = DEFAULT_BUFFER_SIZE,
+    throttle: float = 0,
+    initializer: Optional[Callable[..., None]] = None,
+    initargs: Tuple[Any, ...] = tuple(),
+    wait: bool = True,
+    daemonic: bool = False
+) -> Iterator[ResultType]:
     validate_threadpool_kwargs(
         "threads",
         threads,
@@ -1060,8 +1061,10 @@ def imap(
         throttle=throttle,
     )
 
-    if isinstance(iterable, Sized):
-        threads = min(len(iterable), threads or float("inf"))
+    # If we know the size of the iterable, and this size is less than the
+    # number of desired threads, we adjust the number of threads accordingly
+    if threads is not None and isinstance(iterable, Sized):
+        threads = min(len(iterable), threads)
 
     def generator():
         with ThreadPoolExecutor(
