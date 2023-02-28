@@ -136,6 +136,11 @@ class IterationState(object):
         with self.lock:
             return self.__should_stop()
 
+    def teardown(self) -> None:
+        # We release all threads waiting for us
+        with self.task_is_finished:
+            self.task_is_finished.notify_all()
+
     def __repr__(self):
         return "<{name}{finished} started={started!r} done={done!r}>".format(
             name=self.__class__.__name__,
@@ -854,6 +859,9 @@ class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
                 assert ordered_output_buffer.is_clean()
             else:
                 buffer.teardown()
+
+            # Releasing iteration state waiters
+            state.teardown()
 
             # Detaching timer callback
             self.throttled_groups.detach()
