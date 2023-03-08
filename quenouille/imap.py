@@ -33,7 +33,7 @@ from quenouille.utils import (
     clear,
     flush,
     smash,
-    is_queue,
+    is_usable_queue,
     get_default_maxworkers,
     SmartTimer,
 )
@@ -546,7 +546,7 @@ def validate_threadpool_kwargs(
 def validate_imap_kwargs(
     iterable, func, *, max_workers, key, parallelism, buffer_size, throttle
 ) -> None:
-    if not isinstance(iterable, Iterable) and not is_queue(iterable):
+    if not isinstance(iterable, Iterable) and not is_usable_queue(iterable):
         raise TypeError("target is not iterable nor a queue")
 
     if not callable(func):
@@ -776,7 +776,7 @@ class ThreadPoolExecutor(object):
         self.imap_lock.acquire()
 
         iterator = None
-        iterable_is_queue = is_queue(iterable)
+        iterable_is_queue = is_usable_queue(iterable)
 
         if not iterable_is_queue:
             iterator = iter(iterable)  # type: ignore
@@ -806,7 +806,7 @@ class ThreadPoolExecutor(object):
                                 item = next(iterator)  # type: ignore
                             else:
                                 try:
-                                    item = iterable.get(block=False)  # type: ignore
+                                    item = iterable.get_nowait()  # type: ignore
                                 except Empty:
                                     if state.has_running_tasks():
                                         state.wait_for_any_task_to_finish()

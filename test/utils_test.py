@@ -3,17 +3,17 @@
 # =============================================================================
 from queue import Queue
 
-from quenouille.utils import is_queue, NamedLocks
+from quenouille.utils import is_usable_queue, NamedLocks
 
 
 class TestUtils(object):
-    def test_is_queue(self):
-        assert is_queue(Queue())
-        assert not is_queue(True)
-        assert not is_queue(object())
-        assert not is_queue(dict())
-        assert not is_queue(list())
-        assert not is_queue((i for i in range(4)))
+    def test_is_usable_queue(self):
+        assert is_usable_queue(Queue())
+        assert not is_usable_queue(True)
+        assert not is_usable_queue(object())
+        assert not is_usable_queue(dict())
+        assert not is_usable_queue(list())
+        assert not is_usable_queue((i for i in range(4)))
 
     def test_named_locks(self):
         locks = NamedLocks()
