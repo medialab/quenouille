@@ -1,7 +1,9 @@
 from quenouille import imap_unordered
 
+
 def worker(item):
     return item
+
 
 it = imap_unordered(range(1_000), worker, 100)
 

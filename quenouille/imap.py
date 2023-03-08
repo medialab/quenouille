@@ -47,8 +47,11 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPS
 
 ItemType = TypeVar("ItemType", covariant=True)
 
+
 class QuenouilleQueueProtocol(Protocol[ItemType]):
-    def get_nowait(self) -> ItemType: ...
+    def get_nowait(self) -> ItemType:
+        ...
+
 
 GroupType = TypeVar("GroupType", bound=Hashable)
 ResultType = TypeVar("ResultType")
@@ -635,10 +638,8 @@ class ThreadPoolExecutor(object):
         self.initargs = list(initargs)
 
         # Queues
-        self.job_queue = Queue(
-            maxsize=max_workers
-        )  # type: Queue
-        self.output_queue = Queue() # type: Queue
+        self.job_queue = Queue(maxsize=max_workers)  # type: Queue
+        self.output_queue = Queue()  # type: Queue
 
         # Threading
         self.throttled_groups = ThrottledGroups(
@@ -651,6 +652,8 @@ class ThreadPoolExecutor(object):
         self.boot_barrier = Barrier(max_workers + 1)  # type: Barrier
 
         # State
+        self.original_excepthook = None
+        self.cleanup = None
         self.closed = False  # type: bool
 
         # Thread pool
@@ -682,9 +685,31 @@ class ThreadPoolExecutor(object):
         if self.closed:
             raise RuntimeError("cannot re-enter a closed executor")
 
+        # self.original_excepthook = sys.excepthook
+
+        # def executor_excepthook(exc_type, exc_value, exc_traceback):
+        #     if self.cleanup is not None:
+        #         self.cleanup(False)
+
+        #     self.__kill_workers()
+
+        #     if self.wait:
+        #         for thread in self.threads:
+        #             if thread.is_alive():
+        #                 thread.join()
+
+        #     self.closed = True
+
+        #     self.original_excepthook(exc_type, exc_value, exc_traceback)  # type: ignore
+
+        # sys.excepthook = executor_excepthook
+
         return self
 
     def __exit__(self, *args) -> Optional[bool]:
+        # sys.excepthook = self.original_excepthook
+        # self.original_excepthook = None
+
         self.shutdown(wait=self.wait)
 
     def shutdown(self, wait=True) -> None:
@@ -802,8 +827,13 @@ class ThreadPoolExecutor(object):
         )  # type: OrderedOutputBuffer[ItemType, GroupType, ResultType]
 
         # Recasting for this context
-        self.job_queue = cast("Queue[Union[Job[ItemType, GroupType, ResultType], object]]", self.job_queue)
-        self.output_queue = cast('Queue[Union[BaseException, Job[ItemType, GroupType, ResultType], object]]', self.output_queue)
+        self.job_queue = cast(
+            "Queue[Union[Job[ItemType, GroupType, ResultType], object]]", self.job_queue
+        )
+        self.output_queue = cast(
+            "Queue[Union[BaseException, Job[ItemType, GroupType, ResultType], object]]",
+            self.output_queue,
+        )
 
         def enqueue():
             try:
@@ -884,6 +914,8 @@ class ThreadPoolExecutor(object):
                     dispatcher.join()
 
             self.imap_lock.release()
+
+        self.cleanup = cleanup
 
         def output() -> Iterator[ResultType]:
             raised = False
