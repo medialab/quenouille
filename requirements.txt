@@ -4,3 +4,6 @@ importchecker
 pytest
 twine
 wheel
+
+# Dependencies
+typing_extensions; python_version < '3.8'

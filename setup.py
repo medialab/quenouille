@@ -17,5 +17,8 @@ setup(
     python_requires=">=3.5",
     packages=find_packages(exclude=["test"]),
     package_data={"docs": ["README.md"]},
+    extras_require={
+        ":python_version<'3.8'": ["typing_extensions"],
+    },
     zip_safe=True,
 )

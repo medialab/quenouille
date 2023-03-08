@@ -21,6 +21,12 @@ from typing import (
 )
 
 import sys
+
+if sys.version_info >= (3, 8):
+    from typing import Protocol
+else:
+    from typing_extensions import Protocol
+
 import time
 from queue import Queue, Empty
 from threading import Thread, Event, Lock, Condition, Barrier, BrokenBarrierError
@@ -39,10 +45,14 @@ from quenouille.utils import (
 )
 from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPSILON
 
-ItemType = TypeVar("ItemType")
+ItemType = TypeVar("ItemType", covariant=True)
+
+class QuenouilleQueueProtocol(Protocol[ItemType]):
+    def get_nowait(self) -> ItemType: ...
+
 GroupType = TypeVar("GroupType", bound=Hashable)
 ResultType = TypeVar("ResultType")
-ImapTarget = Union["Queue[ItemType]", Iterable[ItemType]]
+ImapTarget = Union[QuenouilleQueueProtocol[ItemType], Iterable[ItemType]]
 ParallelismType = Union[Callable[[GroupType], int], int]
 ThrottleType = Union[
     Callable[[Optional[GroupType], ItemType, Optional[ResultType]], float], float
@@ -627,10 +637,8 @@ class ThreadPoolExecutor(object):
         # Queues
         self.job_queue = Queue(
             maxsize=max_workers
-        )  # type: Queue[Union[Job[ItemType, GroupType, ResultType], object]]
-        self.output_queue = (
-            Queue()
-        )  # type: Queue[Union[BaseException, Job[ItemType, GroupType, ResultType], object]]
+        )  # type: Queue
+        self.output_queue = Queue() # type: Queue
 
         # Threading
         self.throttled_groups = ThrottledGroups(
@@ -792,6 +800,10 @@ class ThreadPoolExecutor(object):
         ordered_output_buffer = (
             OrderedOutputBuffer()
         )  # type: OrderedOutputBuffer[ItemType, GroupType, ResultType]
+
+        # Recasting for this context
+        self.job_queue = cast("Queue[Union[Job[ItemType, GroupType, ResultType], object]]", self.job_queue)
+        self.output_queue = cast('Queue[Union[BaseException, Job[ItemType, GroupType, ResultType], object]]', self.output_queue)
 
         def enqueue():
             try:
