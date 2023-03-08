@@ -29,6 +29,7 @@ pip install quenouille
   * [Callable parallelism guarantees](#callable-parallelism-guarantees)
   * [Parallelism vs. throttling](#parallelism-vs-throttling)
   * [Adding entropy to throttle](#adding-entropy-to-throttle)
+  * [Caveats regarding exception raising](#caveats-regarding-exception-raising)
   * [Caveats of using imap with queues](#caveats-of-using-imap-with-queues)
 
 ### imap, imap_unordered
@@ -250,9 +251,9 @@ def throttle(group, item, result):
   return 5 + (2 * random())
 ```
 
-#### Caveats of using imap with queues
+#### Caveats regarding exception raising
 
-*Exception deadlocks*
+*Deferred generator usage exception deadlocks*
 
 If you consume a generator returned by `imap/imap_unordered` somewhere else than where you created it, you will get end up in a deadlock if you raise an exception.
 
@@ -280,7 +281,9 @@ for item in it:
   raise RuntimeError
 ```
 
-*Typical queue usage deadlocks*
+#### Caveats of using imap with queues
+
+*Typical deadlocks*
 
 Even if `imap` can process an input queue, you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. It can be easy to footgun yourself if your queue has a `maxsize`, for instance:
 
