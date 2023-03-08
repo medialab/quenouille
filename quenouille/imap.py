@@ -574,7 +574,7 @@ def validate_imap_kwargs(
         raise TypeError('"throttle" cannot be negative')
 
 
-class ThreadPoolExecutor(Generic[ItemType, GroupType, ResultType]):
+class ThreadPoolExecutor(object):
     """
     Quenouille custom ThreadPoolExecutor able to lazily pull items to process
     from iterated streams, all while bounding used memory and respecting
