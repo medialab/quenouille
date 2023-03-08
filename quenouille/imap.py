@@ -86,7 +86,7 @@ class Job(Generic[ItemType, GroupType, ResultType]):
     def __call__(self) -> None:
         try:
             self.result = self.func(self.item)
-        except BaseException as e:
+        except BaseException:
             # We catch the exception before flushing downstream to be
             # sure the job can be passed down the line but it might not be
             # the best thing to do. Time will tell...
