@@ -257,6 +257,7 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
                 return
 
         timer = SmartTimer(throttle_time, self.timer_callback)
+        timer.daemon = True
 
         self.timer = timer
         timer.start()
@@ -991,7 +992,7 @@ class ThreadPoolExecutor(object):
         dispatcher = Thread(
             name="Thread-quenouille-%i-dispatcher" % id(self),
             target=enqueue,
-            daemon=self.daemonic,
+            daemon=True,
         )
         dispatcher.start()
 
