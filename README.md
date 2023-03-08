@@ -270,6 +270,16 @@ for item in it:
   raise RuntimeError
 ```
 
+If you really want to do that, because you don't want to use the `ThreadPoolExecutor` context manager, you can try using the experimental `excepthook` kwarg:
+
+```python
+# Probably safe
+it = imap(..., excepthook=True)
+
+for item in it:
+  raise RuntimeError
+```
+
 *Typical queue usage deadlocks*
 
 Even if `imap` can process an input queue, you should avoid to find yourself in a situation where adding to the queue might block execution if you don't want to end in a deadlock. It can be easy to footgun yourself if your queue has a `maxsize`, for instance:

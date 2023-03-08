@@ -5,7 +5,7 @@ def worker(item):
     return item
 
 
-it = imap_unordered(range(1_000), worker, 100)
+it = imap_unordered(range(1_000), worker, 100, excepthook=True)
 
 for j in it:
     if j > 500:

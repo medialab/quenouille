@@ -535,7 +535,13 @@ class OrderedOutputBuffer(Generic[ItemType, GroupType, ResultType]):
 
 
 def validate_threadpool_kwargs(
-    name, max_workers=None, initializer=None, initargs=None, wait=None, daemonic=None
+    name,
+    max_workers=None,
+    initializer=None,
+    initargs=None,
+    wait=None,
+    daemonic=None,
+    excepthook=None,
 ) -> None:
     if max_workers is None:
         return
@@ -554,6 +560,9 @@ def validate_threadpool_kwargs(
 
     if not isinstance(daemonic, bool):
         raise TypeError('"daemonic" should be boolean')
+
+    if not isinstance(excepthook, bool):
+        raise TypeError('"excepthook" should be boolean')
 
 
 def validate_imap_kwargs(
@@ -614,6 +623,7 @@ class ThreadPoolExecutor(object):
         initargs: Tuple[Any, ...] = tuple(),
         wait: bool = True,
         daemonic: bool = False,
+        excepthook: bool = False,
     ):
         # Validation and defaults
         validate_threadpool_kwargs(
@@ -623,6 +633,7 @@ class ThreadPoolExecutor(object):
             initargs=initargs,
             wait=wait,
             daemonic=daemonic,
+            excepthook=excepthook,
         )
 
         if max_workers is None:
@@ -652,6 +663,7 @@ class ThreadPoolExecutor(object):
         self.boot_barrier = Barrier(max_workers + 1)  # type: Barrier
 
         # State
+        self.patching_excepthook = excepthook
         self.original_excepthook = None
         self.cleanup = None
         self.closed = False  # type: bool
@@ -685,30 +697,35 @@ class ThreadPoolExecutor(object):
         if self.closed:
             raise RuntimeError("cannot re-enter a closed executor")
 
-        # self.original_excepthook = sys.excepthook
+        if not self.patching_excepthook:
+            return self
 
-        # def executor_excepthook(exc_type, exc_value, exc_traceback):
-        #     if self.cleanup is not None:
-        #         self.cleanup(False)
+        self.original_excepthook = sys.excepthook
 
-        #     self.__kill_workers()
+        def executor_excepthook(exc_type, exc_value, exc_traceback):
+            if self.cleanup is not None:
+                self.cleanup(False)
 
-        #     if self.wait:
-        #         for thread in self.threads:
-        #             if thread.is_alive():
-        #                 thread.join()
+            # NOTE: this is a subset of the shutdown routine
+            self.__kill_workers()
 
-        #     self.closed = True
+            if self.wait:
+                for thread in self.threads:
+                    if thread.is_alive():
+                        thread.join()
 
-        #     self.original_excepthook(exc_type, exc_value, exc_traceback)  # type: ignore
+            self.closed = True
 
-        # sys.excepthook = executor_excepthook
+            self.original_excepthook(exc_type, exc_value, exc_traceback)  # type: ignore
+
+        sys.excepthook = executor_excepthook
 
         return self
 
     def __exit__(self, *args) -> Optional[bool]:
-        # sys.excepthook = self.original_excepthook
-        # self.original_excepthook = None
+        if self.patching_excepthook:
+            sys.excepthook = self.original_excepthook
+            self.original_excepthook = None
 
         self.shutdown(wait=self.wait)
 
@@ -887,6 +904,10 @@ class ThreadPoolExecutor(object):
                 smash(self.output_queue, e)
 
         def cleanup(normal_exit: bool = True) -> None:
+            # NOTE: this is somewhat of a lock to avoid double firing of the
+            # cleanup function in some race conditions with sys.excepthook
+            self.cleanup = None
+
             end_event.set()
 
             # Clearing the job queue to cancel next jobs
@@ -962,7 +983,10 @@ class ThreadPoolExecutor(object):
                 raise
 
             finally:
-                cleanup(not raised)
+                # NOTE: we use self.cleanup here to avoid a race condition
+                # with sys.excepthook
+                if self.cleanup:
+                    self.cleanup(not raised)
 
         dispatcher = Thread(
             name="Thread-quenouille-%i-dispatcher" % id(self),
@@ -1046,7 +1070,8 @@ def imap_unordered(
     initializer: Optional[Callable[..., None]] = None,
     initargs: Tuple[Any, ...] = tuple(),
     wait: bool = True,
-    daemonic: bool = False
+    daemonic: bool = False,
+    excepthook: bool = False
 ) -> Iterator[ResultType]:
     validate_threadpool_kwargs(
         "threads",
@@ -1055,6 +1080,7 @@ def imap_unordered(
         initargs=initargs,
         wait=wait,
         daemonic=daemonic,
+        excepthook=excepthook,
     )
     validate_imap_kwargs(
         iterable=iterable,
@@ -1078,6 +1104,7 @@ def imap_unordered(
             initargs=initargs,
             wait=wait,
             daemonic=daemonic,
+            excepthook=excepthook,
         ) as executor:
             yield from executor.imap_unordered(
                 iterable,
@@ -1103,7 +1130,8 @@ def imap(
     initializer: Optional[Callable[..., None]] = None,
     initargs: Tuple[Any, ...] = tuple(),
     wait: bool = True,
-    daemonic: bool = False
+    daemonic: bool = False,
+    excepthook: bool = False
 ) -> Iterator[ResultType]:
     validate_threadpool_kwargs(
         "threads",
@@ -1112,6 +1140,7 @@ def imap(
         initargs=initargs,
         wait=wait,
         daemonic=daemonic,
+        excepthook=excepthook,
     )
     validate_imap_kwargs(
         iterable=iterable,
@@ -1135,6 +1164,7 @@ def imap(
             initargs=initargs,
             wait=wait,
             daemonic=daemonic,
+            excepthook=excepthook,
         ) as executor:
             yield from executor.imap(
                 iterable,
