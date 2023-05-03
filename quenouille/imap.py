@@ -589,8 +589,8 @@ def validate_imap_kwargs(
     # if parallelism > max_workers:
     #     raise TypeError('"parallelism" cannot be greater than the number of workers')
 
-    if not isinstance(buffer_size, int) or buffer_size < 1:
-        raise TypeError('"buffer_size" is not an integer > 0')
+    if not isinstance(buffer_size, int) or buffer_size < 0:
+        raise TypeError('"buffer_size" is not an integer >= 0')
 
     if not isinstance(throttle, (int, float)) and not callable(throttle):
         raise TypeError('"throttle" is not a number nor callable')
@@ -859,7 +859,7 @@ class ThreadPoolExecutor(object):
             try:
                 while not end_event.is_set():
                     # First we check to see if there is a suitable buffered job
-                    job = buffer.get()
+                    job = None if buffer_size == 0 else buffer.get()
 
                     if job is None:
                         # Else we consume the iterator to find one
@@ -895,8 +895,9 @@ class ThreadPoolExecutor(object):
 
                         job = Job(func, item=item, index=next(job_counter), group=group)
 
-                        buffer.put(job)
-                        continue
+                        if buffer_size > 0:
+                            buffer.put(job)
+                            continue
 
                     # Registering the job
                     buffer.register_job(job)

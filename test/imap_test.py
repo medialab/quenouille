@@ -4,7 +4,7 @@
 import time
 import pytest
 import threading
-from queue import Queue
+from queue import Queue, LifoQueue
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
@@ -72,8 +72,8 @@ class TestImap(object):
                 DATA, sleeper, 4, parallelism=1, key=itemgetter(0), buffer_size="test"
             )
 
-        with pytest.raises(TypeError):
-            imap_unordered(DATA, sleeper, 4, parallelism=1, buffer_size=0)
+        # with pytest.raises(TypeError):
+        #     imap_unordered(DATA, sleeper, 4, parallelism=1, buffer_size=0)
 
         # with pytest.raises(TypeError):
         #     imap_unordered(DATA, sleeper, 2, parallelism=4, key=itemgetter(0))
@@ -530,3 +530,23 @@ class TestImap(object):
                     range(10), worker, throttle=1.0, parallelism=4, key=group
                 ):
                     pass
+
+    def test_empty_buffer(self):
+        def worker(n):
+            return n * 10
+
+        result = list(imap(range(10), worker, 4, buffer_size=0))
+
+        assert result == [worker(n) for n in range(10)]
+
+        stack = LifoQueue()
+
+        for n in range(10):
+            stack.put(n)
+
+        def group(_):
+            return 1
+
+        result = list(imap(stack, worker, 1, buffer_size=0, parallelism=1, key=group))
+
+        assert result == [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
