@@ -616,7 +616,7 @@ class ThreadPoolExecutor(object):
         self,
         max_workers: Optional[int] = None,
         initializer: Optional[Callable[..., None]] = None,
-        initargs: Tuple[Any, ...] = tuple(),
+        initargs: Iterable[Any] = tuple(),
         wait: bool = True,
         daemonic: bool = False,
         excepthook: bool = False,
@@ -1064,7 +1064,7 @@ def imap_unordered(
     buffer_size: int = DEFAULT_BUFFER_SIZE,
     throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
     initializer: Optional[Callable[..., None]] = None,
-    initargs: Tuple[Any, ...] = tuple(),
+    initargs: Iterable[Any] = tuple(),
     wait: bool = True,
     daemonic: bool = False,
     excepthook: bool = False
@@ -1124,7 +1124,7 @@ def imap(
     buffer_size: int = DEFAULT_BUFFER_SIZE,
     throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
     initializer: Optional[Callable[..., None]] = None,
-    initargs: Tuple[Any, ...] = tuple(),
+    initargs: Iterable[Any] = tuple(),
     wait: bool = True,
     daemonic: bool = False,
     excepthook: bool = False

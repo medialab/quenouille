@@ -512,4 +512,14 @@ class TestImap(object):
             )
 
         with pytest.raises(BrokenThreadPool):
-            executor = ThreadPoolExecutor(2, initializer=hellraiser)
+            ThreadPoolExecutor(2, initializer=hellraiser)
+
+    # def test_error_throttling_plus_parallelism(self):
+    #     def worker(n):
+    #         return n * 2
+
+    #     with ThreadPoolExecutor(4) as executor:
+    #         for double in executor.imap_unordered(
+    #             range(10), worker, throttle=1.0, parallelism=4
+    #         ):
+    #             print(double)
