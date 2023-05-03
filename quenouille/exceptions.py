@@ -13,3 +13,7 @@ class QuenouilleException(Exception):
 # But I need to support python 3.6
 class BrokenThreadPool(QuenouilleException):
     pass
+
+
+class InvalidThrottleParallelismCombination(QuenouilleException):
+    pass

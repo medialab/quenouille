@@ -34,7 +34,10 @@ from collections import OrderedDict
 from collections.abc import Sized
 from itertools import count
 
-from quenouille.exceptions import BrokenThreadPool
+from quenouille.exceptions import (
+    BrokenThreadPool,
+    InvalidThrottleParallelismCombination,
+)
 from quenouille.utils import (
     clear,
     flush,
@@ -228,7 +231,11 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
 
         if throttle_time != 0:
             group = cast(GroupType, job.group)
-            assert group not in self
+
+            if group in self:
+                raise InvalidThrottleParallelismCombination(
+                    "throttle cannot be > 0 for a group with parallelism > 1"
+                )
 
             self.groups[group] = time.time() + throttle_time  # type: ignore
             self.__spawn_timer(throttle_time)  # type: ignore

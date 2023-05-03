@@ -8,7 +8,10 @@ from queue import Queue
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
-from quenouille.exceptions import BrokenThreadPool
+from quenouille.exceptions import (
+    BrokenThreadPool,
+    InvalidThrottleParallelismCombination,
+)
 
 DATA = [
     ("A", 0.3, 0),
@@ -514,12 +517,16 @@ class TestImap(object):
         with pytest.raises(BrokenThreadPool):
             ThreadPoolExecutor(2, initializer=hellraiser)
 
-    # def test_error_throttling_plus_parallelism(self):
-    #     def worker(n):
-    #         return n * 2
+    def test_error_throttling_plus_parallelism(self):
+        def group(_):
+            return 1
 
-    #     with ThreadPoolExecutor(4) as executor:
-    #         for double in executor.imap_unordered(
-    #             range(10), worker, throttle=1.0, parallelism=4
-    #         ):
-    #             print(double)
+        def worker(n):
+            return n * 2
+
+        with ThreadPoolExecutor(4) as executor:
+            with pytest.raises(InvalidThrottleParallelismCombination):
+                for _ in executor.imap_unordered(
+                    range(10), worker, throttle=1.0, parallelism=4, key=group
+                ):
+                    pass
