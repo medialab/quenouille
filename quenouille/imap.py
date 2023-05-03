@@ -93,14 +93,11 @@ class Job(Generic[ItemType, GroupType, ResultType]):
             self.exc_info = sys.exc_info()
 
     def __repr__(self):
-        return (
-            "<{name} id={id!r} index={index!r} group={group!r} item={item!r}>".format(
-                name=self.__class__.__name__,
-                index=self.index,
-                group=self.group,
-                item=self.item,
-                id=id(self),
-            )
+        return "<{name} index={index!r} group={group!r} item={item!r}>".format(
+            name=self.__class__.__name__,
+            index=self.index,
+            group=self.group,
+            item=self.item,
         )
 
 
@@ -181,7 +178,7 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
         # Properties
         self.output_queue = output_queue  # type: Queue
         self.throttle = throttle  # type: ThrottleType[GroupType, ItemType, ResultType]
-        self.identity = None  # type: Optional[int]
+        self.identity = None  # type: Optional[Any]
 
         # Containers
         self.groups = {}  # type: Dict[GroupType, float]
@@ -209,12 +206,10 @@ class ThrottledGroups(Generic[ItemType, GroupType, ResultType]):
     ) -> None:
         assert key is None or callable(key)
 
-        new_identity = id(key)
-
-        if new_identity != self.identity:
+        if key is not self.identity:
             self.__reset()
 
-        self.identity = new_identity
+        self.identity = key
         self.throttle = throttle
 
         assert isinstance(self.throttle, (int, float)) or callable(self.throttle)
