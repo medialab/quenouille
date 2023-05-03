@@ -438,7 +438,7 @@ class Buffer(Generic[ItemType, GroupType, ResultType]):
         with self.lock:
             assert not self.__full()
 
-            self.items[id(job)] = job
+            self.items[job.index] = job
 
     def get(self) -> Optional[Job[ItemType, GroupType, ResultType]]:
         while not self.teardown_event.is_set():
@@ -451,7 +451,7 @@ class Buffer(Generic[ItemType, GroupType, ResultType]):
             job = self.__find_suitable_job()
 
             if job is not None:
-                del self.items[id(job)]
+                del self.items[job.index]
                 self.lock.release()
                 return job
 
