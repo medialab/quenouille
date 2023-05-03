@@ -569,7 +569,7 @@ def validate_threadpool_kwargs(
 
 
 def validate_imap_kwargs(
-    iterable, func, *, max_workers, key, parallelism, buffer_size, throttle
+    iterable, func, *, key, parallelism, buffer_size, throttle
 ) -> None:
     if not isinstance(iterable, Iterable) and not is_usable_queue(iterable):
         raise TypeError("target is not iterable nor a queue")
@@ -585,9 +585,6 @@ def validate_imap_kwargs(
 
     if isinstance(parallelism, int) and parallelism < 0:
         raise TypeError('"parallelism" is not a positive integer')
-
-    # if parallelism > max_workers:
-    #     raise TypeError('"parallelism" cannot be greater than the number of workers')
 
     if not isinstance(buffer_size, int) or buffer_size < 0:
         raise TypeError('"buffer_size" is not an integer >= 0')
@@ -1014,7 +1011,6 @@ class ThreadPoolExecutor(object):
         validate_imap_kwargs(
             iterable=iterable,
             func=func,
-            max_workers=self.max_workers,
             key=key,
             parallelism=parallelism,
             buffer_size=buffer_size,
@@ -1044,7 +1040,6 @@ class ThreadPoolExecutor(object):
         validate_imap_kwargs(
             iterable=iterable,
             func=func,
-            max_workers=self.max_workers,
             key=key,
             parallelism=parallelism,
             buffer_size=buffer_size,
@@ -1089,7 +1084,6 @@ def imap_unordered(
     validate_imap_kwargs(
         iterable=iterable,
         func=func,
-        max_workers=threads,
         key=key,
         parallelism=parallelism,
         buffer_size=buffer_size,
@@ -1149,7 +1143,6 @@ def imap(
     validate_imap_kwargs(
         iterable=iterable,
         func=func,
-        max_workers=threads,
         key=key,
         parallelism=parallelism,
         buffer_size=buffer_size,
