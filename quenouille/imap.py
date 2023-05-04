@@ -514,7 +514,7 @@ class OrderedOutputBuffer(Generic[ItemType, GroupType, ResultType]):
 
     def __init__(self):
         self.last_index = 0  # type: int
-        self.items = {}  # type: Dict[int, Job[ItemType, GroupType, ResultType]]
+        self.items = {}  # type: Dict[int, ResultType]
 
     def is_clean(self) -> bool:
         """
@@ -525,16 +525,16 @@ class OrderedOutputBuffer(Generic[ItemType, GroupType, ResultType]):
 
     def flush(self) -> Iterator[ResultType]:
         while self.last_index in self.items:
-            yield self.items.pop(self.last_index).result  # type: ignore
+            yield self.items.pop(self.last_index)
             self.last_index += 1
 
     def output(self, job: Job[ItemType, GroupType, ResultType]) -> Iterator[ResultType]:
         if job.index == self.last_index:
             self.last_index += 1
-            yield job.result  # type: ignore
+            yield job.result # type: ignore
             yield from self.flush()
         else:
-            self.items[job.index] = job
+            self.items[job.index] = job.result # type: ignore
 
 
 def validate_threadpool_kwargs(
@@ -977,6 +977,9 @@ class ThreadPoolExecutor(object):
 
                     # Cleanup memory and avoid keeping references attached to
                     # ease up garbage collection
+                    # NOTE: the ordered output buffer does not store any reference
+                    # to jobs but only keep their results. This is therefore
+                    # the last remaining reference to a job there.
                     del job
 
             except:
