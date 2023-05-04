@@ -4,7 +4,7 @@
 #
 # Miscellaneous utility functions.
 #
-from typing import TypeVar, Generic, List, Set, Tuple, Hashable, Iterator
+from typing import TypeVar, Generic, List, Dict, Tuple, Hashable, Iterator
 
 import os
 import time
@@ -120,21 +120,34 @@ class TimedHeapSet(Generic[HeapSetItemType]):
 
     def clear(self) -> None:
         self.heap = []  # type: List[Tuple[float, HeapSetItemType]]
-        self.set = set()  # type: Set[HeapSetItemType]
+        self.map = {}  # type: Dict[HeapSetItemType, float]
 
     def __len__(self) -> int:
         return len(self.heap)
 
     def __contains__(self, item: HeapSetItemType) -> bool:
-        return item in self.set
+        return item in self.map
 
     def add(self, item: HeapSetItemType, duration: float) -> None:
-        self.set.add(item)
-        heapq.heappush(self.heap, (time.time() + duration, item))
+        next_time = time.time() + duration
+        self.map[item] = next_time
+        heapq.heappush(self.heap, (next_time, item))
+
+    def wait_for(self, item: HeapSetItemType) -> None:
+        # NOTE: we cleanup before just in case
+        self.cleanup()
+
+        next_time = self.map.get(item)
+
+        if next_time is None:
+            return
+
+        time.sleep(max((next_time - time.time()), 0) + TIMER_EPSILON)
+        self.cleanup()
 
     def cleanup(self) -> None:
         current_time = time.time()
 
         while self.heap and current_time >= self.heap[0][0] - TIMER_EPSILON:
-            self.set.remove(self.heap[0][1])
+            del self.map[self.heap[0][1]]
             heapq.heappop(self.heap)

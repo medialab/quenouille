@@ -559,3 +559,18 @@ class TestImap(object):
             result = list(executor.imap_unordered(range(10), worker))
 
             assert result == [worker(n) for n in range(10)]
+
+            q = Queue()
+
+            for n in range(5):
+                q.put(n)
+
+            result = []
+
+            for n in executor.imap_unordered(q, lambda x: x):
+                result.append(n)
+
+                if n < 5:
+                    q.put(5 + n)
+
+            assert result == list(range(10))

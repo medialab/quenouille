@@ -10,9 +10,9 @@ def group(item):
 
 
 def throttle(group, item, result):
-    return 2.0
+    return 2.0 if group else 5.0
 
 
 with ThreadPoolExecutor(0) as executor:
-    for n in executor.imap_unordered(range(5), worker, throttle=throttle):
+    for n in executor.imap_unordered(range(5), worker, throttle=throttle, key=group):
         print(n)

@@ -45,6 +45,7 @@ from quenouille.utils import (
     is_usable_queue,
     get_default_maxworkers,
     SmartTimer,
+    TimedHeapSet,
 )
 from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPSILON
 
@@ -843,24 +844,25 @@ class ThreadPoolExecutor(object):
         items = cast(Iterator[ItemType], items)
 
         # TODO: make throttling work per group
-        next_wait_time = None # type: Optional[float]
+        timers = TimedHeapSet()  # type: TimedHeapSet[GroupType]
 
         for item in items:
-
             group = None if key is None else key(item)
 
-            # Iterative throttling
-            if next_wait_time is not None:
-                time.sleep(next_wait_time)
-                next_wait_time = None
+            if group is not None:
+                # NOTE: wait_for also perform cleanup for us
+                timers.wait_for(group)
 
             result = func(item)
 
-            if throttle is not None:
+            if group is not None and throttle is not None:
                 if callable(throttle):
-                    next_wait_time = throttle(group, item, result)
+                    duration = throttle(group, item, result)
                 else:
-                    next_wait_time = throttle
+                    duration = throttle
+
+                if duration > 0:
+                    timers.add(group, duration)
 
             yield result
 
