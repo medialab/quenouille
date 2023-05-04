@@ -852,6 +852,7 @@ class ThreadPoolExecutor(object):
             self.output_queue,
         )
 
+        # NOTE: currently buffer_size=0 does not work with throttle nor group parallelism
         def enqueue():
             try:
                 while not end_event.is_set():
