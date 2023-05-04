@@ -4,7 +4,7 @@
 #
 # Miscellaneous utility functions.
 #
-from typing import TypeVar, Generic, List, Set, Tuple, Hashable
+from typing import TypeVar, Generic, List, Set, Tuple, Hashable, Iterator
 
 import os
 import time
@@ -37,6 +37,14 @@ def flush(q: "Queue[ItemType]", n: int, msg: ItemType) -> None:
 def smash(q: "Queue[ItemType]", v: ItemType) -> None:
     clear(q)
     q.put_nowait(v)
+
+
+def queue_iter(q: "Queue[ItemType]") -> Iterator[ItemType]:
+    while True:
+        try:
+            yield q.get_nowait()
+        except Empty:
+            break
 
 
 def is_usable_queue(v) -> bool:

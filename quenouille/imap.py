@@ -13,7 +13,6 @@ from typing import (
     Callable,
     Dict,
     List,
-    Tuple,
     Any,
     Iterator,
     Iterable,
@@ -42,6 +41,7 @@ from quenouille.utils import (
     clear,
     flush,
     smash,
+    queue_iter,
     is_usable_queue,
     get_default_maxworkers,
     SmartTimer,
@@ -531,10 +531,10 @@ class OrderedOutputBuffer(Generic[ItemType, GroupType, ResultType]):
     def output(self, job: Job[ItemType, GroupType, ResultType]) -> Iterator[ResultType]:
         if job.index == self.last_index:
             self.last_index += 1
-            yield job.result # type: ignore
+            yield job.result  # type: ignore
             yield from self.flush()
         else:
-            self.items[job.index] = job.result # type: ignore
+            self.items[job.index] = job.result  # type: ignore
 
 
 def validate_threadpool_kwargs(
@@ -549,8 +549,8 @@ def validate_threadpool_kwargs(
     if max_workers is None:
         return
 
-    if not isinstance(max_workers, int) or max_workers < 1:
-        raise TypeError('"%s" should be an integer > 0' % name)
+    if not isinstance(max_workers, int) or max_workers < 0:
+        raise TypeError('"%s" should be an integer >= 0' % name)
 
     if initializer is not None and not callable(initializer):
         raise TypeError('"initializer" is not callable')
@@ -602,6 +602,10 @@ class ThreadPoolExecutor(object):
     from iterated streams, all while bounding used memory and respecting
     group parallelism and throttling.
 
+    Note that if given max_workers=0, this pool will still work, but without
+    relying on threads whatsoever. This can be useful in some scenarios where
+    you want to avoid duplicating code.
+
     Args:
         max_workers (int, optional): Number of threads to use.
             Defaults to min(32, os.cpu_count() + 1).
@@ -641,6 +645,7 @@ class ThreadPoolExecutor(object):
 
         # Properties
         self.max_workers = max_workers  # type: int
+        self.dummy = max_workers == 0  # type: bool
         self.wait = wait  # type: bool
         self.daemonic = daemonic  # type: bool
 
@@ -668,6 +673,12 @@ class ThreadPoolExecutor(object):
         self.cleanup = None
         self.closed = False  # type: bool
 
+        if self.dummy:
+            # If pool is dummy, we run the initializer synchronously
+            if self.initializer is not None:
+                self.initializer(*self.initargs)
+            return
+
         # Thread pool
         self.threads = [
             Thread(
@@ -693,7 +704,15 @@ class ThreadPoolExecutor(object):
             self.shutdown(wait=self.wait)
             raise BrokenThreadPool
 
+    @property
+    def is_actually_multithreaded(self) -> bool:
+        return self.dummy
+
     def __enter__(self):
+        # NOTE: nothing needs to happens if the executor is not multithreaded
+        if self.dummy:
+            return self
+
         if self.closed:
             raise RuntimeError("cannot re-enter a closed executor")
 
@@ -723,6 +742,10 @@ class ThreadPoolExecutor(object):
         return self
 
     def __exit__(self, *args) -> Optional[bool]:
+        # NOTE: nothing needs to happens if the executor is not multithreaded
+        if self.dummy:
+            return
+
         if self.patching_excepthook:
             sys.excepthook = self.original_excepthook
             self.original_excepthook = None
@@ -730,6 +753,10 @@ class ThreadPoolExecutor(object):
         self.shutdown(wait=self.wait)
 
     def shutdown(self, wait=True) -> None:
+        # NOTE: shutdown is a noop if the executor is not multithreaded
+        if self.dummy:
+            return
+
         if self.closed:
             return
 
@@ -800,6 +827,43 @@ class ThreadPoolExecutor(object):
         except BaseException as e:
             smash(self.output_queue, e)
 
+    def __imap_sync(
+        self,
+        iterable: ImapTarget[ItemType],
+        func: Callable[[ItemType], ResultType],
+        *,
+        key: Optional[Callable[[ItemType], GroupType]] = None,
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
+    ) -> Iterator[ResultType]:
+        if is_usable_queue(iterable):
+            items = queue_iter(iterable)  # type: ignore
+        else:
+            items = iterable
+
+        items = cast(Iterator[ItemType], items)
+
+        # TODO: make throttling work per group
+        next_wait_time = None # type: Optional[float]
+
+        for item in items:
+
+            group = None if key is None else key(item)
+
+            # Iterative throttling
+            if next_wait_time is not None:
+                time.sleep(next_wait_time)
+                next_wait_time = None
+
+            result = func(item)
+
+            if throttle is not None:
+                if callable(throttle):
+                    next_wait_time = throttle(group, item, result)
+                else:
+                    next_wait_time = throttle
+
+            yield result
+
     def __imap(
         self,
         iterable: ImapTarget[ItemType],
@@ -811,6 +875,9 @@ class ThreadPoolExecutor(object):
         buffer_size: int = DEFAULT_BUFFER_SIZE,
         throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
     ) -> Iterator[ResultType]:
+        if self.dummy:
+            return self.__imap_sync(iterable, func, key=key, throttle=throttle)
+
         # Cannot run in multiple threads
         if self.imap_lock.locked():
             raise RuntimeError(

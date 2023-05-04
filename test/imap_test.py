@@ -550,3 +550,12 @@ class TestImap(object):
         result = list(imap(stack, worker, 1, buffer_size=0, parallelism=1, key=group))
 
         assert result == [90, 80, 70, 60, 50, 40, 30, 20, 10, 0]
+
+    def test_sync_pool(self):
+        def worker(n):
+            return n * 10
+
+        with ThreadPoolExecutor(0) as executor:
+            result = list(executor.imap_unordered(range(10), worker))
+
+            assert result == [worker(n) for n in range(10)]

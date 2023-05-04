@@ -3,7 +3,7 @@
 # =============================================================================
 from queue import Queue
 
-from quenouille.utils import is_usable_queue, NamedLocks
+from quenouille.utils import is_usable_queue, NamedLocks, queue_iter
 
 
 class TestUtils(object):
@@ -14,6 +14,22 @@ class TestUtils(object):
         assert not is_usable_queue(dict())
         assert not is_usable_queue(list())
         assert not is_usable_queue((i for i in range(4)))
+
+    def test_queue_iter(self):
+        q = Queue()
+
+        for n in range(10):
+            q.put(n)
+
+        result = []
+
+        for n in queue_iter(q):
+            result.append(n)
+
+            if n < 10:
+                q.put(10 + n)
+
+        assert result == list(range(20))
 
     def test_named_locks(self):
         locks = NamedLocks()
