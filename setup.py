@@ -5,7 +5,7 @@ with open("./README.md", "r") as f:
 
 setup(
     name="quenouille",
-    version="1.8.0",
+    version="1.9.0",
     description="A library of multithreaded iterator workflows.",
     long_description=long_description,
     long_description_content_type="text/markdown",
