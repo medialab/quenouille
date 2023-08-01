@@ -7,7 +7,6 @@ jobs:
     strategy:
       matrix:
         include:
-
           # Ubuntu
           - os: ubuntu-20.04
             python-version: "3.5"
@@ -25,8 +24,12 @@ jobs:
             python-version: "3.11"
 
           # Mac
-          - os: macos-10.15
+          - os: macos-12
             python-version: "3.6"
+          - os: macos-12
+            python-version: "3.7"
+          - os: macos-12
+            python-version: "3.8"
 
           # Windows
           - os: windows-latest
