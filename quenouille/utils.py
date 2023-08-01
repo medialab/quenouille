@@ -42,15 +42,9 @@ def smash(q: "Queue[ItemType]", v: ItemType) -> None:
 def queue_iter(q: "Queue[ItemType]") -> Iterator[ItemType]:
     while True:
         try:
-            yield q.get_nowait()
+            yield q.get(False)
         except Empty:
             break
-
-
-def is_usable_queue(v) -> bool:
-    # NOTE: get_nowait is the only method used by quenouille when working
-    # on a queue given by the user, as of now.
-    return hasattr(v, "get_nowait") and callable(v.get_nowait)
 
 
 # As per: https://docs.python.org/3/library/concurrent.futures.html#concurrent.futures.ThreadPoolExecutor

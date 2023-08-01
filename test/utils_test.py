@@ -3,7 +3,12 @@
 # =============================================================================
 from queue import Queue
 
-from quenouille.utils import is_usable_queue, NamedLocks, queue_iter
+from quenouille.imap import QuenouilleQueueProtocol
+from quenouille.utils import NamedLocks, queue_iter
+
+
+def is_usable_queue(v):
+    return isinstance(v, QuenouilleQueueProtocol)
 
 
 class TestUtils(object):

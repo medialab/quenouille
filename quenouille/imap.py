@@ -22,9 +22,9 @@ from typing import (
 import sys
 
 if sys.version_info >= (3, 8):
-    from typing import Protocol
+    from typing import Protocol, runtime_checkable
 else:
-    from typing_extensions import Protocol
+    from typing_extensions import Protocol, runtime_checkable
 
 import time
 from queue import Queue, Empty
@@ -42,7 +42,6 @@ from quenouille.utils import (
     flush,
     smash,
     queue_iter,
-    is_usable_queue,
     get_default_maxworkers,
     SmartTimer,
     TimedHeapSet,
@@ -52,7 +51,11 @@ from quenouille.constants import THE_END_IS_NIGH, DEFAULT_BUFFER_SIZE, TIMER_EPS
 ItemType = TypeVar("ItemType", covariant=True)
 
 
+@runtime_checkable
 class QuenouilleQueueProtocol(Protocol[ItemType]):
+    def get(self, block: bool = ...) -> ItemType:
+        ...
+
     def get_nowait(self) -> ItemType:
         ...
 
@@ -572,7 +575,9 @@ def validate_threadpool_kwargs(
 def validate_imap_kwargs(
     iterable, func, *, key, parallelism, buffer_size, throttle
 ) -> None:
-    if not isinstance(iterable, Iterable) and not is_usable_queue(iterable):
+    if not isinstance(iterable, Iterable) and not isinstance(
+        iterable, QuenouilleQueueProtocol
+    ):
         raise TypeError("target is not iterable nor a queue")
 
     if not callable(func):
@@ -836,7 +841,7 @@ class ThreadPoolExecutor(object):
         key: Optional[Callable[[ItemType], GroupType]] = None,
         throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
     ) -> Iterator[ResultType]:
-        if is_usable_queue(iterable):
+        if isinstance(iterable, QuenouilleQueueProtocol):
             items = queue_iter(iterable)  # type: ignore
         else:
             items = iterable
@@ -895,7 +900,7 @@ class ThreadPoolExecutor(object):
         self.imap_lock.acquire()
 
         iterator = None
-        iterable_is_queue = is_usable_queue(iterable)
+        iterable_is_queue = isinstance(iterable, QuenouilleQueueProtocol)
 
         if not iterable_is_queue:
             iterator = iter(iterable)  # type: ignore
@@ -935,7 +940,7 @@ class ThreadPoolExecutor(object):
                                 item = next(iterator)  # type: ignore
                             else:
                                 try:
-                                    item = iterable.get_nowait()  # type: ignore
+                                    item = iterable.get(False)  # type: ignore
                                 except Empty:
                                     if state.has_running_tasks():
                                         state.wait_for_any_task_to_finish()
