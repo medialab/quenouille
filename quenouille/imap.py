@@ -573,7 +573,7 @@ def validate_threadpool_kwargs(
 
 
 def validate_imap_kwargs(
-    iterable, func, *, key, parallelism, buffer_size, throttle
+    iterable, func, *, key, parallelism, buffer_size, throttle, block, panic
 ) -> None:
     if not isinstance(iterable, Iterable) and not isinstance(
         iterable, QuenouilleQueueProtocol
@@ -600,6 +600,12 @@ def validate_imap_kwargs(
 
     if isinstance(throttle, (int, float)) and throttle < 0:
         raise TypeError('"throttle" cannot be negative')
+
+    if not isinstance(block, bool):
+        raise TypeError('"block" should be boolean')
+
+    if panic is not None and not callable(panic):
+        raise TypeError('"panic" should be callable')
 
 
 class ThreadPoolExecutor(object):
@@ -839,10 +845,11 @@ class ThreadPoolExecutor(object):
         func: Callable[[ItemType], ResultType],
         *,
         key: Optional[Callable[[ItemType], GroupType]] = None,
-        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
+        block: bool = False
     ) -> Iterator[ResultType]:
         if isinstance(iterable, QuenouilleQueueProtocol):
-            items = queue_iter(iterable)  # type: ignore
+            items = queue_iter(iterable, block)  # type: ignore
         else:
             items = iterable
 
@@ -880,7 +887,9 @@ class ThreadPoolExecutor(object):
         key: Optional[Callable[[ItemType], GroupType]] = None,
         parallelism: ParallelismType[GroupType] = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
-        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
+        block: bool = False,
+        panic: Optional[Callable[[], None]] = None
     ) -> Iterator[ResultType]:
         if self.dummy:
             return self.__imap_sync(iterable, func, key=key, throttle=throttle)
@@ -940,7 +949,7 @@ class ThreadPoolExecutor(object):
                                 item = next(iterator)  # type: ignore
                             else:
                                 try:
-                                    item = iterable.get(False)  # type: ignore
+                                    item = iterable.get(block)  # type: ignore
                                 except Empty:
                                     if state.has_running_tasks():
                                         state.wait_for_any_task_to_finish()
@@ -977,9 +986,16 @@ class ThreadPoolExecutor(object):
                     self.job_queue.put(job)
 
             except BaseException as e:
+                # NOTE: this can happen multiple times, with nested
+                # exception or when cleaning up as we panic and
+                # unblock the user's queue or iterator for instance.
+                # This said, this is probably alright...
                 smash(self.output_queue, e)
 
         def cleanup(normal_exit: bool = True) -> None:
+            if not normal_exit and panic is not None:
+                panic()
+
             # NOTE: this is somewhat of a lock to avoid double firing of the
             # cleanup function in some race conditions with sys.excepthook
             self.cleanup = None
@@ -1084,7 +1100,9 @@ class ThreadPoolExecutor(object):
         key: Optional[Callable[[ItemType], GroupType]] = None,
         parallelism: ParallelismType[GroupType] = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
-        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
+        block: bool = False,
+        panic: Optional[Callable[[], None]] = None
     ) -> Iterator[ResultType]:
         validate_imap_kwargs(
             iterable=iterable,
@@ -1093,6 +1111,8 @@ class ThreadPoolExecutor(object):
             parallelism=parallelism,
             buffer_size=buffer_size,
             throttle=throttle,
+            block=block,
+            panic=panic,
         )
 
         return self.__imap(
@@ -1103,6 +1123,8 @@ class ThreadPoolExecutor(object):
             parallelism=parallelism,
             buffer_size=buffer_size,
             throttle=throttle,
+            block=block,
+            panic=panic,
         )
 
     def imap(
@@ -1113,7 +1135,9 @@ class ThreadPoolExecutor(object):
         key: Optional[Callable[[ItemType], GroupType]] = None,
         parallelism: ParallelismType[GroupType] = 1,
         buffer_size: int = DEFAULT_BUFFER_SIZE,
-        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0
+        throttle: ThrottleType[GroupType, ItemType, ResultType] = 0,
+        block: bool = False,
+        panic: Optional[Callable[[], None]] = None
     ) -> Iterator[ResultType]:
         validate_imap_kwargs(
             iterable=iterable,
@@ -1122,6 +1146,8 @@ class ThreadPoolExecutor(object):
             parallelism=parallelism,
             buffer_size=buffer_size,
             throttle=throttle,
+            block=block,
+            panic=panic,
         )
 
         return self.__imap(
@@ -1132,6 +1158,8 @@ class ThreadPoolExecutor(object):
             parallelism=parallelism,
             buffer_size=buffer_size,
             throttle=throttle,
+            block=block,
+            panic=panic,
         )
 
 
@@ -1148,7 +1176,9 @@ def imap_unordered(
     initargs: Iterable[Any] = tuple(),
     wait: bool = True,
     daemonic: bool = False,
-    excepthook: bool = False
+    excepthook: bool = False,
+    block: bool = False,
+    panic: Optional[Callable[[], None]] = None
 ) -> Iterator[ResultType]:
     validate_threadpool_kwargs(
         "threads",
@@ -1166,6 +1196,8 @@ def imap_unordered(
         parallelism=parallelism,
         buffer_size=buffer_size,
         throttle=throttle,
+        block=block,
+        panic=panic,
     )
 
     # If we know the size of the iterable, and this size is less than the
@@ -1189,6 +1221,8 @@ def imap_unordered(
                 parallelism=parallelism,
                 buffer_size=buffer_size,
                 throttle=throttle,
+                block=block,
+                panic=panic,
             )
 
     return generator()
@@ -1207,7 +1241,9 @@ def imap(
     initargs: Iterable[Any] = tuple(),
     wait: bool = True,
     daemonic: bool = False,
-    excepthook: bool = False
+    excepthook: bool = False,
+    block: bool = False,
+    panic: Optional[Callable[[], None]] = None
 ) -> Iterator[ResultType]:
     validate_threadpool_kwargs(
         "threads",
@@ -1225,6 +1261,8 @@ def imap(
         parallelism=parallelism,
         buffer_size=buffer_size,
         throttle=throttle,
+        block=block,
+        panic=panic,
     )
 
     # If we know the size of the iterable, and this size is less than the
@@ -1248,6 +1286,8 @@ def imap(
                 parallelism=parallelism,
                 buffer_size=buffer_size,
                 throttle=throttle,
+                block=block,
+                panic=panic,
             )
 
     return generator()

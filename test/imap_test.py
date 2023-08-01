@@ -4,7 +4,7 @@
 import time
 import pytest
 import threading
-from queue import Queue, LifoQueue
+from queue import Queue, LifoQueue, Empty
 from operator import itemgetter
 
 from quenouille import imap_unordered, imap, ThreadPoolExecutor
@@ -574,3 +574,67 @@ class TestImap(object):
                     q.put(5 + n)
 
             assert result == list(range(10))
+
+    def test_block_panic(self):
+        class CustomError(Exception):
+            pass
+
+        class BrokenQueueError(Exception):
+            pass
+
+        class CustomQueue:
+            def __init__(self):
+                self.started = False
+                self.cancel_event = threading.Event()
+
+            def get(self, block=True):
+                if not self.started:
+                    self.started = True
+                    return 1
+
+                self.cancel_event.wait()
+
+                raise BrokenQueueError
+
+            def get_nowait(self):
+                return self.get(False)
+
+            def release(self):
+                self.cancel_event.set()
+
+        q = CustomQueue()
+
+        def worker(n):
+            return n
+
+        result = []
+        raised = False
+
+        try:
+            with ThreadPoolExecutor(1) as executor:
+                for n in executor.imap_unordered(
+                    q, worker, block=True, panic=q.release
+                ):
+                    result.append(n)
+                    raise CustomError
+        except CustomError:
+            raised = True
+
+        assert raised
+        assert result == [1]
+
+        # Sync version
+        q = CustomQueue()
+        raised = False
+
+        try:
+            # NOTE: panic will not be called if sync
+            with ThreadPoolExecutor(0) as executor:
+                for n in executor.imap_unordered(
+                    q, worker, block=True, panic=q.release
+                ):
+                    raise CustomError
+        except CustomError:
+            raised = True
+
+        assert raised

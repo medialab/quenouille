@@ -39,10 +39,10 @@ def smash(q: "Queue[ItemType]", v: ItemType) -> None:
     q.put_nowait(v)
 
 
-def queue_iter(q: "Queue[ItemType]") -> Iterator[ItemType]:
+def queue_iter(q: "Queue[ItemType]", block: bool = False) -> Iterator[ItemType]:
     while True:
         try:
-            yield q.get(False)
+            yield q.get(block)
         except Empty:
             break
 
