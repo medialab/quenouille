@@ -94,12 +94,13 @@ class NamedLocks(Generic[LockedItemKey]):
 
     def __getitem__(self, key: LockedItemKey) -> Lock:
         with self.own_lock:
-            if key not in self.locks:
+            lock = self.locks.get(key)
+
+            if lock is None:
                 lock = Lock()
                 self.locks[key] = lock
-                return lock
 
-            return self.locks[key]
+            return lock
 
     def __call__(self, key: LockedItemKey) -> Lock:
         return self[key]
